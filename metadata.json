@@ -1,0 +1,6 @@
+{
+  "name": "PathGPTPilot",
+  "description": "An Explainable Multimodal AI Framework for Cancer Histopathology Analysis using SwinUNETR and Large Language Models",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
