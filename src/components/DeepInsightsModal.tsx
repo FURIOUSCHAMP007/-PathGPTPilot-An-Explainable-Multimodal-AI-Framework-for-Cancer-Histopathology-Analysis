@@ -15,8 +15,10 @@ import {
   ShieldAlert, 
   FileText, 
   Bookmark,
-  Layers
+  Layers,
+  Download
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 
 interface DeepInsightsModalProps {
   isOpen: boolean;
@@ -85,51 +87,330 @@ export default function DeepInsightsModal({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleDownloadPDF = () => {
+    if (!insights) return;
+    
+    // Initialize jsPDF (A4 page size: 210mm x 297mm)
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+    const contentWidth = pageWidth - (margin * 2);
+    
+    let currentY = 25;
+
+    // Helper to add header on every page
+    const addHeader = (pageNum: number) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(110, 110, 110);
+      doc.text('PathGPTPilot CLINICAL ONCOLOGY WORKSTATION', margin, 12);
+      doc.text(`PAGE ${pageNum}`, pageWidth - margin - 15, 12);
+      
+      // Top divider line
+      doc.setDrawColor(210, 210, 210);
+      doc.setLineWidth(0.2);
+      doc.line(margin, 14, pageWidth - margin, 14);
+    };
+
+    // Helper to add footer on every page
+    const addFooter = (pageNum: number) => {
+      // Bottom divider line
+      doc.setDrawColor(230, 230, 230);
+      doc.setLineWidth(0.2);
+      doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
+
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7);
+      doc.setTextColor(140, 140, 140);
+      doc.text('CONFIDENTIAL - FOR CLINICAL RESEARCH USE ONLY', margin, pageHeight - 10);
+      doc.text('PathGPTPilot Multi-Somatic AI v2.4.0', pageWidth - margin - 50, pageHeight - 10);
+    };
+
+    // Draw page 1 custom decorative header
+    addHeader(1);
+
+    // Document Title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(24, 28, 36); // Elegant deep gray
+    doc.text('EXECUTIVE ONCOLOGY SUMMARY', margin, currentY);
+    currentY += 8;
+
+    // Subtitle & System Info
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(80, 80, 80);
+    doc.text('System: PathGPTPilot Multi-Somatic AI Platform', margin, currentY);
+    currentY += 5;
+    
+    // Date
+    const todayStr = new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    doc.text(`Generated on: ${todayStr}`, margin, currentY);
+    currentY += 8;
+
+    // Metadata Card
+    doc.setFillColor(245, 247, 250); // Light gray fill
+    doc.setDrawColor(220, 225, 230);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(margin, currentY, contentWidth, 24, 2, 2, 'FD');
+
+    // Inside Metadata card
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(40, 45, 55);
+    doc.text('ANALYZED COHORT SUMMARY:', margin + 4, currentY + 6);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(80, 85, 95);
+    const caseIds = highRiskSamples.map(s => `${s.id} (${calculateRiskScore(s)}%)`).join(', ');
+    const wrappedCases = doc.splitTextToSize(`Target Specimens: ${caseIds}`, contentWidth - 8);
+    doc.text(wrappedCases, margin + 4, currentY + 11);
+    
+    doc.text(`Total Active High-Risk Cases: ${highRiskSamples.length} Specimen Profiles`, margin + 4, currentY + 20);
+    currentY += 32;
+
+    // Split raw insights text into individual lines
+    const rawLines = insights.split('\n');
+    let pageNum = 1;
+
+    rawLines.forEach((rawLine) => {
+      let cleanLine = rawLine.trim();
+
+      // Skip empty or trivial lines
+      if (cleanLine === '•' || cleanLine === '*' || cleanLine === '-' || cleanLine === '' || cleanLine === '---') {
+        return;
+      }
+
+      // Check header types
+      let isH1 = cleanLine.startsWith('# ');
+      let isH2 = cleanLine.startsWith('## ');
+      let isH3 = cleanLine.startsWith('### ');
+      
+      let fontSize = 10;
+      let fontStyle = 'normal';
+      let textColor = [50, 50, 50]; // Regular charcoal text
+      let isBullet = cleanLine.startsWith('* ') || cleanLine.startsWith('- ') || cleanLine.startsWith('• ');
+      let isBoldBullet = cleanLine.startsWith('* **') || cleanLine.startsWith('- **') || cleanLine.startsWith('• **');
+      
+      let textToDraw = cleanLine;
+      let indent = 0;
+
+      if (isH1) {
+        fontSize = 13;
+        fontStyle = 'bold';
+        textColor = [16, 24, 48]; // Dark blue header
+        textToDraw = cleanLine.replace('# ', '').trim();
+        currentY += 5; // Extra spacing before H1
+      } else if (isH2) {
+        fontSize = 11;
+        fontStyle = 'bold';
+        textColor = [109, 40, 217]; // Purple header color matches applet styling
+        textToDraw = cleanLine.replace('## ', '').trim();
+        currentY += 3;
+      } else if (isH3) {
+        fontSize = 10;
+        fontStyle = 'bold';
+        textColor = [29, 78, 216]; // Blue sub-header matches applet styling
+        textToDraw = cleanLine.replace('### ', '').trim();
+        currentY += 2;
+      } else if (isBoldBullet || isBullet) {
+        indent = 5;
+        // Clean up markdown bullet syntaxes
+        textToDraw = cleanLine.replace(/^([\*\-\s•]+)/, '').trim();
+      }
+
+      // Strip markdown bold asterisks if we aren't handling rich inline bold
+      textToDraw = textToDraw.replace(/\*\*/g, '');
+      textToDraw = textToDraw.replace(/\*/g, '');
+
+      // Check page height limit and add page if needed
+      const checkAndAddPage = (neededHeight: number) => {
+        if (currentY + neededHeight > pageHeight - 20) {
+          addFooter(pageNum);
+          doc.addPage();
+          pageNum++;
+          currentY = 25;
+          addHeader(pageNum);
+          return true;
+        }
+        return false;
+      };
+
+      // Set font styling
+      doc.setFont('helvetica', fontStyle);
+      doc.setFontSize(fontSize);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+
+      // Split text into lines that fit the remaining width
+      const maxLineW = isBullet || isBoldBullet ? contentWidth - indent - 4 : contentWidth;
+      const wrappedLines = doc.splitTextToSize(textToDraw, maxLineW);
+      const leading = fontSize * 0.45; // Line spacing
+
+      // Check if we need a new page for this paragraph
+      const totalParagraphHeight = wrappedLines.length * leading;
+      checkAndAddPage(totalParagraphHeight + 2);
+
+      // Draw each wrapped line
+      wrappedLines.forEach((lineStr: string, idx: number) => {
+        // Double check per line to avoid any weird overflow
+        checkAndAddPage(leading + 1);
+
+        if (idx === 0 && (isBullet || isBoldBullet)) {
+          // Draw standard bullet
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(109, 40, 217); // Purple bullet
+          doc.text('•', margin, currentY);
+          
+          doc.setFont('helvetica', fontStyle);
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+          doc.text(lineStr, margin + indent, currentY);
+        } else {
+          doc.text(lineStr, margin + indent, currentY);
+        }
+        currentY += leading;
+      });
+
+      // Regular gap after paragraph
+      currentY += 2;
+    });
+
+    // Add footer to final page
+    addFooter(pageNum);
+
+    // Save/Download the PDF file
+    doc.save(`PathGPTPilot-Executive-Oncology-Summary-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   if (!isOpen) return null;
 
-  // Custom markdown simple parsing renderer
+  // Custom markdown high-fidelity clean parser
   const renderMarkdown = (text: string) => {
     if (!text) return null;
-    return text.split('\n').map((line, idx) => {
+
+    // Helper to format inline bold (**text**) and clean up remaining single asterisks
+    const parseInline = (rawText: string) => {
+      // Remove any leading bullet characters if they slipped through
+      let clean = rawText.replace(/^[\*\-\s•]+/, '');
+      // Strip outer/remaining raw single asterisks
+      clean = clean.replace(/\*(?!\*)/g, '');
+      
+      const regex = /\*\*(.*?)\*\*/g;
+      const parts = [];
+      let lastIndex = 0;
+      let match;
+
+      while ((match = regex.exec(clean)) !== null) {
+        if (match.index > lastIndex) {
+          parts.push(clean.substring(lastIndex, match.index));
+        }
+        parts.push(
+          <strong 
+            key={match.index} 
+            className="text-white font-bold font-mono bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-900/40 text-[11px] inline-block mx-0.5"
+          >
+            {match[1]}
+          </strong>
+        );
+        lastIndex = regex.lastIndex;
+      }
+
+      if (lastIndex < clean.length) {
+        parts.push(clean.substring(lastIndex));
+      }
+
+      if (parts.length === 0) {
+        return <span className="text-[#C9D1D9]">{clean}</span>;
+      }
+
+      return (
+        <span className="text-[#C9D1D9]">
+          {parts.map((p, i) => (typeof p === 'string' ? p.replace(/\*/g, '') : p))}
+        </span>
+      );
+    };
+
+    // Filter lines and map them
+    const lines = text.split('\n');
+    const elements: React.ReactNode[] = [];
+
+    lines.forEach((line, idx) => {
       const cleanLine = line.trim();
-      const contentWithoutHashes = cleanLine.replace(/#/g, '').trim();
+      
+      // Skip empty bullets or standalone bullets
+      if (cleanLine === '•' || cleanLine === '*' || cleanLine === '-' || cleanLine === '') {
+        return;
+      }
+
+      // Headers
       if (cleanLine.startsWith('# ')) {
-        return <h3 key={idx} className="text-sm font-black text-white border-b border-[#30363D] pb-1.5 mt-5 mb-2.5 font-mono uppercase tracking-wide">{contentWithoutHashes}</h3>;
+        const content = cleanLine.replace(/#/g, '').trim();
+        elements.push(
+          <h3 key={idx} className="text-sm font-black text-white border-b border-[#30363D] pb-1.5 mt-6 mb-3 font-mono uppercase tracking-widest flex items-center gap-2">
+            <span className="w-1.5 h-3 bg-purple-500 rounded-sm" />
+            {content}
+          </h3>
+        );
+        return;
       }
       if (cleanLine.startsWith('## ')) {
-        return <h4 key={idx} className="text-xs font-bold text-gray-100 border-b border-[#21262D] pb-1 mt-4 mb-2 font-mono uppercase text-purple-400">{contentWithoutHashes}</h4>;
+        const content = cleanLine.replace(/#/g, '').trim();
+        elements.push(
+          <h4 key={idx} className="text-xs font-bold text-purple-400 border-b border-[#21262D] pb-1 mt-5 mb-2 font-mono uppercase tracking-wider">
+            {content}
+          </h4>
+        );
+        return;
       }
       if (cleanLine.startsWith('### ')) {
-        return <h5 key={idx} className="text-[11px] font-bold text-blue-400 mt-3 mb-1 font-mono uppercase tracking-wider">{contentWithoutHashes}</h5>;
+        const content = cleanLine.replace(/#/g, '').trim();
+        elements.push(
+          <h5 key={idx} className="text-[11px] font-bold text-blue-400 mt-4 mb-1.5 font-mono uppercase tracking-wider">
+            {content}
+          </h5>
+        );
+        return;
       }
-      if (cleanLine.startsWith('* **') || cleanLine.startsWith('- **')) {
-        const parts = contentWithoutHashes.split('**');
-        return (
-          <div key={idx} className="text-xs text-gray-300 pl-4 py-1 flex items-start gap-2">
-            <span className="text-purple-500 font-bold">•</span>
-            <span>
-              <strong className="text-white font-semibold">{parts[1]}</strong>
-              {parts.slice(2).join('')}
-            </span>
+
+      // Check if line is a list item
+      const isListItem = cleanLine.startsWith('* ') || cleanLine.startsWith('- ') || cleanLine.startsWith('• ');
+      const isBoldListItem = cleanLine.startsWith('* **') || cleanLine.startsWith('- **') || cleanLine.startsWith('• **');
+
+      if (isBoldListItem || isListItem) {
+        // Strip the list token
+        let itemContent = cleanLine.replace(/^([\*\-\s•]+)/, '').trim();
+        elements.push(
+          <div key={idx} className="text-xs text-gray-300 pl-4 py-1.5 flex items-start gap-2 border-l border-[#21262D] hover:border-purple-500/30 transition-all ml-1 my-0.5">
+            <span className="text-purple-500 font-bold select-none">•</span>
+            <div className="flex-1 leading-relaxed">
+              {parseInline(itemContent)}
+            </div>
           </div>
         );
+        return;
       }
-      if (cleanLine.startsWith('* ') || cleanLine.startsWith('- ')) {
-        return (
-          <div key={idx} className="text-xs text-gray-300 pl-4 py-1 flex items-start gap-2">
-            <span className="text-purple-500 font-bold">•</span>
-            <span>{contentWithoutHashes}</span>
-          </div>
-        );
-      }
-      if (cleanLine.startsWith('**')) {
-        return <p key={idx} className="text-xs text-purple-300 bg-purple-950/20 border-l-2 border-purple-500 rounded p-3 my-3 font-mono leading-relaxed">{contentWithoutHashes.replace(/\*\*/g, '')}</p>;
-      }
-      if (cleanLine === '') {
-        return <div key={idx} className="h-1" />;
-      }
-      return <p key={idx} className="text-xs text-gray-300 leading-relaxed font-sans mb-2">{contentWithoutHashes}</p>;
+
+      // Standard paragraph
+      elements.push(
+        <p key={idx} className="text-xs text-[#8B949E] leading-relaxed font-sans mb-3 pl-1">
+          {parseInline(cleanLine)}
+        </p>
+      );
     });
+
+    return elements;
   };
 
   return (
@@ -248,13 +529,22 @@ export default function DeepInsightsModal({
               Close
             </button>
             {insights && (
-              <button
-                onClick={copyToClipboard}
-                className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-black uppercase rounded-lg shadow-md transition-all cursor-pointer"
-              >
-                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                {copied ? 'Copied!' : 'Copy Summary'}
-              </button>
+              <>
+                <button
+                  onClick={handleDownloadPDF}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-mono text-xs font-black uppercase rounded-lg shadow-md transition-all cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  Download PDF
+                </button>
+                <button
+                  onClick={copyToClipboard}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-black uppercase rounded-lg shadow-md transition-all cursor-pointer"
+                >
+                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copied ? 'Copied!' : 'Copy Summary'}
+                </button>
+              </>
             )}
           </div>
         </div>

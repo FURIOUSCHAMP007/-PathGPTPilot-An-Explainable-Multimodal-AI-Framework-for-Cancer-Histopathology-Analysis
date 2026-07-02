@@ -451,6 +451,491 @@ export const SAMPLE_SLIDES: HistologySample[] = [
       egfr: 'Normal'
     },
     cells: generateTissueNodes('grade_iii')
+  },
+  // 4 More Breast Cancer cases (total 6)
+  {
+    id: 'TCGA-BRCA-11',
+    name: 'Breast Core Specimen 11',
+    originDataset: 'TCGA',
+    description: 'Invasive Ductal Carcinoma showing solid sheets of tumor cells with minimal gland formation and high mitotic rate.',
+    magnification: '40x',
+    tissueType: 'Breast Core',
+    defaultGrade: 'Grade III (High Grade)',
+    confidence: 93.5,
+    features: ['Solid Sheets of Tumor Cells', 'Atypical Mitoses', 'Minimal Gland Formation'],
+    clinical: {
+      age: 54,
+      gender: 'Female',
+      stage: 'Stage III',
+      smokingHistory: 'Never',
+      survivalMonthsEstimate: 30
+    },
+    genomic: {
+      tp53: 'Mutant',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('grade_iii')
+  },
+  {
+    id: 'TCGA-BRCA-12',
+    name: 'Breast Core Specimen 12',
+    originDataset: 'TCGA',
+    description: 'Well-differentiated Invasive Ductal Carcinoma with over 75% of tumor forming glands, mild nuclear pleomorphism.',
+    magnification: '20x',
+    tissueType: 'Breast Core',
+    defaultGrade: 'Grade I (Low Grade)',
+    confidence: 91.2,
+    features: ['Abundant Gland Formation', 'Uniform Small Nuclei', 'Low Mitotic Density'],
+    clinical: {
+      age: 65,
+      gender: 'Female',
+      stage: 'Stage I',
+      smokingHistory: 'Never',
+      survivalMonthsEstimate: 120
+    },
+    genomic: {
+      tp53: 'Wild-type',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('low_grade_prostate')
+  },
+  {
+    id: 'TCGA-BRCA-13',
+    name: 'Breast Core Specimen 13',
+    originDataset: 'TCGA',
+    description: 'Invasive Lobular Carcinoma characterized by small, dyscohesive tumor cells infiltrating in a single-file pattern.',
+    magnification: '40x',
+    tissueType: 'Breast Core',
+    defaultGrade: 'Grade II (Moderate Grade)',
+    confidence: 92.7,
+    features: ['Single-file Pattern', 'Dyscohesive Cells', 'Concentric Periductal Infiltration'],
+    clinical: {
+      age: 59,
+      gender: 'Female',
+      stage: 'Stage II',
+      smokingHistory: 'Former',
+      survivalMonthsEstimate: 54
+    },
+    genomic: {
+      tp53: 'Wild-type',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('grade_ii')
+  },
+  {
+    id: 'TCGA-BRCA-14',
+    name: 'Breast Core Specimen 14',
+    originDataset: 'TCGA',
+    description: 'Triple-Negative Invasive Breast Carcinoma showing extensive geographic necrosis and highly atypical mitotic figures.',
+    magnification: '40x',
+    tissueType: 'Breast Core',
+    defaultGrade: 'Grade IV (High Grade)',
+    confidence: 95.1,
+    features: ['Geographic Necrosis', 'Severe Nuclear Pleomorphism', 'Prominent Lymphocytic Infiltrate'],
+    clinical: {
+      age: 47,
+      gender: 'Female',
+      stage: 'Stage IV',
+      smokingHistory: 'Never',
+      survivalMonthsEstimate: 15
+    },
+    genomic: {
+      tp53: 'Mutant',
+      brca1: 'Mutant',
+      egfr: 'Amplified'
+    },
+    cells: generateTissueNodes('grade_iv')
+  },
+  // 3 More Prostate Cancer cases (total 6)
+  {
+    id: 'PANDA-PRST-15',
+    name: 'Prostate Core Specimen 15',
+    originDataset: 'PANDA',
+    description: 'Prostate biopsy showing poorly-formed and ragged glands representing Gleason Pattern 4 components.',
+    magnification: '20x',
+    tissueType: 'Prostate Biopsy',
+    defaultGrade: 'Gleason 4+3 (Grade Group 3)',
+    confidence: 92.9,
+    features: ['Poorly-formed Glands', 'Infiltrating Cribriform Masses', 'Intraluminal Mucinous Secretions'],
+    clinical: {
+      age: 68,
+      gender: 'Male',
+      stage: 'Stage III',
+      smokingHistory: 'Never',
+      survivalMonthsEstimate: 45
+    },
+    genomic: {
+      tp53: 'Wild-type',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('grade_iii')
+  },
+  {
+    id: 'PANDA-PRST-16',
+    name: 'Prostate Core Specimen 16',
+    originDataset: 'PANDA',
+    description: 'Prostate needle core with sheets of undifferentiated cancer cells and single cells without gland structure.',
+    magnification: '40x',
+    tissueType: 'Prostate Biopsy',
+    defaultGrade: 'Gleason 5+5 (Grade Group 5)',
+    confidence: 96.0,
+    features: ['Comedo Necrosis', 'Undifferentiated Solid Sheets', 'Severe Cytologic Atypia'],
+    clinical: {
+      age: 71,
+      gender: 'Male',
+      stage: 'Stage IV',
+      smokingHistory: 'Former',
+      survivalMonthsEstimate: 12
+    },
+    genomic: {
+      tp53: 'Mutant',
+      brca1: 'Normal',
+      egfr: 'Amplified'
+    },
+    cells: generateTissueNodes('grade_iv')
+  },
+  {
+    id: 'PANDA-PRST-17',
+    name: 'Prostate Core Specimen 17',
+    originDataset: 'PANDA',
+    description: 'Prostate biopsy with Gleason Pattern 3 infiltrating the stroma, presenting well-formed microglandular patterns.',
+    magnification: '20x',
+    tissueType: 'Prostate Biopsy',
+    defaultGrade: 'Gleason 3+4 (Grade Group 2)',
+    confidence: 90.8,
+    features: ['Well-formed Microglands', 'Focal Cribriform Glands', 'Hyperchromatic Nuclei'],
+    clinical: {
+      age: 64,
+      gender: 'Male',
+      stage: 'Stage II',
+      smokingHistory: 'Never',
+      survivalMonthsEstimate: 84
+    },
+    genomic: {
+      tp53: 'Wild-type',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('grade_ii')
+  },
+  // 4 More Lung Cancer cases (total 6)
+  {
+    id: 'TCGA-LUAD-18',
+    name: 'Lung Resection Specimen 18',
+    originDataset: 'TCGA',
+    description: 'Acinar pattern lung adenocarcinoma showing neoplastic glands infiltrating the fibrotic desmoplastic stroma.',
+    magnification: '20x',
+    tissueType: 'Lung Resection',
+    defaultGrade: 'Grade II (Moderate Grade)',
+    confidence: 90.5,
+    features: ['Acinar Glandular Structures', 'Desmoplastic Stromal Response', 'Intraneoplastic Mucin'],
+    clinical: {
+      age: 62,
+      gender: 'Female',
+      stage: 'Stage II',
+      smokingHistory: 'Former',
+      survivalMonthsEstimate: 50
+    },
+    genomic: {
+      tp53: 'Wild-type',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('grade_ii')
+  },
+  {
+    id: 'TCGA-LUAD-19',
+    name: 'Lung Resection Specimen 19',
+    originDataset: 'TCGA',
+    description: 'Solid lung adenocarcinoma showing sheets of polygonal tumor cells with intracellular mucin droplets, highly invasive.',
+    magnification: '40x',
+    tissueType: 'Lung Resection',
+    defaultGrade: 'Grade III (High Grade)',
+    confidence: 94.1,
+    features: ['Solid Sheets', 'Intracellular Mucin Droplets', 'High Mitotic Index'],
+    clinical: {
+      age: 57,
+      gender: 'Male',
+      stage: 'Stage III',
+      smokingHistory: 'Active',
+      survivalMonthsEstimate: 22
+    },
+    genomic: {
+      tp53: 'Mutant',
+      brca1: 'Normal',
+      egfr: 'Amplified'
+    },
+    cells: generateTissueNodes('grade_iii')
+  },
+  {
+    id: 'TCGA-LUAD-20',
+    name: 'Lung Resection Specimen 20',
+    originDataset: 'TCGA',
+    description: 'Minimally invasive lung adenocarcinoma showing predominantly lepidic pattern with small focus of acinar invasion.',
+    magnification: '20x',
+    tissueType: 'Lung Resection',
+    defaultGrade: 'Grade I (Low Grade)',
+    confidence: 89.2,
+    features: ['Predominantly Lepidic', 'Uniform Nuclear Morphology', 'Micro-invasion Focus'],
+    clinical: {
+      age: 66,
+      gender: 'Female',
+      stage: 'Stage I',
+      smokingHistory: 'Never',
+      survivalMonthsEstimate: 96
+    },
+    genomic: {
+      tp53: 'Wild-type',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('low_grade_prostate')
+  },
+  {
+    id: 'TCGA-LUAD-21',
+    name: 'Lung Resection Specimen 21',
+    originDataset: 'TCGA',
+    description: 'Metastatic lung adenocarcinoma to regional lymph node, exhibiting extensive papillary tumor architecture.',
+    magnification: '40x',
+    tissueType: 'Lung Resection',
+    defaultGrade: 'Grade IV (High Grade)',
+    confidence: 94.8,
+    features: ['Papillary Proliferations', 'Stromal Core Invasion', 'Pleomorphic Nucleoli'],
+    clinical: {
+      age: 69,
+      gender: 'Male',
+      stage: 'Stage IV',
+      smokingHistory: 'Former',
+      survivalMonthsEstimate: 16
+    },
+    genomic: {
+      tp53: 'Mutant',
+      brca1: 'Normal',
+      egfr: 'Amplified'
+    },
+    cells: generateTissueNodes('grade_iv')
+  },
+  // 5 More Colon Cancer cases (total 6)
+  {
+    id: 'TCGA-COAD-22',
+    name: 'Colon Adenocarcinoma Specimen 22',
+    originDataset: 'TCGA',
+    description: 'Well-differentiated colon adenocarcinoma presenting simple glandular structures with tall columnar neoplastic epithelial cells.',
+    magnification: '20x',
+    tissueType: 'Colon Polyps',
+    defaultGrade: 'Grade I (Low Grade)',
+    confidence: 92.2,
+    features: ['Serrated Borders', 'Tall Columnar Cells', 'Preserved Polarized Nuclei'],
+    clinical: {
+      age: 70,
+      gender: 'Male',
+      stage: 'Stage I',
+      smokingHistory: 'Never',
+      survivalMonthsEstimate: 104
+    },
+    genomic: {
+      tp53: 'Wild-type',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('low_grade_prostate')
+  },
+  {
+    id: 'TCGA-COAD-23',
+    name: 'Colon Adenocarcinoma Specimen 23',
+    originDataset: 'TCGA',
+    description: 'Moderately differentiated colon adenocarcinoma presenting infiltrative irregular glands and frequent luminal necrotic debris.',
+    magnification: '20x',
+    tissueType: 'Colon Polyps',
+    defaultGrade: 'Grade II (Moderate Grade)',
+    confidence: 90.9,
+    features: ['Irregular Glandular Contours', 'Necrotic Debris', 'Stromal Infiltration'],
+    clinical: {
+      age: 61,
+      gender: 'Female',
+      stage: 'Stage II',
+      smokingHistory: 'Never',
+      survivalMonthsEstimate: 60
+    },
+    genomic: {
+      tp53: 'Wild-type',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('grade_ii')
+  },
+  {
+    id: 'TCGA-COAD-24',
+    name: 'Colon Adenocarcinoma Specimen 24',
+    originDataset: 'TCGA',
+    description: 'Poorly-differentiated colon adenocarcinoma with prominent solid nesting, cellular pleomorphism and high mitotic activity.',
+    magnification: '40x',
+    tissueType: 'Colon Polyps',
+    defaultGrade: 'Grade III (High Grade)',
+    confidence: 93.6,
+    features: ['Solid Nesting', 'Severe Cytological Atypia', 'High Mitotic Activity'],
+    clinical: {
+      age: 58,
+      gender: 'Male',
+      stage: 'Stage III',
+      smokingHistory: 'Former',
+      survivalMonthsEstimate: 32
+    },
+    genomic: {
+      tp53: 'Mutant',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('grade_iii')
+  },
+  {
+    id: 'TCGA-COAD-25',
+    name: 'Colon Adenocarcinoma Specimen 25',
+    originDataset: 'TCGA',
+    description: 'Highly advanced mucinous adenocarcinoma of the colon containing massive extracellular mucin pools with floating cancer nests.',
+    magnification: '20x',
+    tissueType: 'Colon Polyps',
+    defaultGrade: 'Grade IV (High Grade)',
+    confidence: 94.5,
+    features: ['Extracellular Mucin Pools', 'Floating Malignant Clusters', 'Signet Ring Cells'],
+    clinical: {
+      age: 64,
+      gender: 'Female',
+      stage: 'Stage IV',
+      smokingHistory: 'Never',
+      survivalMonthsEstimate: 14
+    },
+    genomic: {
+      tp53: 'Mutant',
+      brca1: 'Normal',
+      egfr: 'Amplified'
+    },
+    cells: generateTissueNodes('grade_iv')
+  },
+  {
+    id: 'TCGA-COAD-26',
+    name: 'Colon Adenocarcinoma Specimen 26',
+    originDataset: 'TCGA',
+    description: 'Sigmoid colon resection displaying deeply infiltrative neoplastic cells past the muscularis propria into paracolic fat.',
+    magnification: '20x',
+    tissueType: 'Colon Polyps',
+    defaultGrade: 'Grade II (Moderate Grade)',
+    confidence: 91.1,
+    features: ['Deep Infiltration', 'Muscularis Disruption', 'Atypical Mitoses'],
+    clinical: {
+      age: 72,
+      gender: 'Male',
+      stage: 'Stage III',
+      smokingHistory: 'Former',
+      survivalMonthsEstimate: 40
+    },
+    genomic: {
+      tp53: 'Wild-type',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('grade_ii')
+  },
+  // 4 More Lymph Node cases (total 6)
+  {
+    id: 'CAMELYON16-LN-27',
+    name: 'Lymph Node Specimen 27',
+    originDataset: 'CAMELYON16',
+    description: 'Subcapsular micro-metastasis of lobular breast carcinoma within sentinel lymph node showing dyscohesive cell patterns.',
+    magnification: '40x',
+    tissueType: 'Breast Core',
+    defaultGrade: 'Grade III (Metastatic)',
+    confidence: 93.9,
+    features: ['Subcapsular Micro-metastasis', 'Dyscohesive Growth', 'Indian-file Infiltration'],
+    clinical: {
+      age: 50,
+      gender: 'Female',
+      stage: 'Stage III',
+      smokingHistory: 'Never',
+      survivalMonthsEstimate: 36
+    },
+    genomic: {
+      tp53: 'Wild-type',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('grade_iii')
+  },
+  {
+    id: 'CAMELYON16-LN-28',
+    name: 'Lymph Node Specimen 28',
+    originDataset: 'CAMELYON16',
+    description: 'Axillary lymph node with macrometastasis of breast origin, featuring solid cohesive nesting and central comedo-type necrosis.',
+    magnification: '40x',
+    tissueType: 'Breast Core',
+    defaultGrade: 'Grade IV (Metastatic)',
+    confidence: 95.8,
+    features: ['Macrometastasis', 'Comedo-type Necrosis', 'Cohesive Nests'],
+    clinical: {
+      age: 55,
+      gender: 'Female',
+      stage: 'Stage IV',
+      smokingHistory: 'Never',
+      survivalMonthsEstimate: 18
+    },
+    genomic: {
+      tp53: 'Mutant',
+      brca1: 'Mutant',
+      egfr: 'Amplified'
+    },
+    cells: generateTissueNodes('grade_iv')
+  },
+  {
+    id: 'CAMELYON16-LN-29',
+    name: 'Lymph Node Specimen 29',
+    originDataset: 'CAMELYON16',
+    description: 'Isolated tumor cells (ITC) in sentinel lymph node sinus, characterized by sparse clusters of cytokeratin-positive epithelial cells.',
+    magnification: '20x',
+    tissueType: 'Breast Core',
+    defaultGrade: 'Grade I (Metastatic)',
+    confidence: 92.1,
+    features: ['Isolated Tumor Cells', 'Sinusoidal Distribution', 'No Capsular Breach'],
+    clinical: {
+      age: 63,
+      gender: 'Female',
+      stage: 'Stage I',
+      smokingHistory: 'Never',
+      survivalMonthsEstimate: 110
+    },
+    genomic: {
+      tp53: 'Wild-type',
+      brca1: 'Normal',
+      egfr: 'Normal'
+    },
+    cells: generateTissueNodes('low_grade_prostate')
+  },
+  {
+    id: 'CAMELYON16-LN-30',
+    name: 'Lymph Node Specimen 30',
+    originDataset: 'CAMELYON16',
+    description: 'Sentinel lymph node showcasing massive macrometastatic involvement with complete architectural effacement and extranodal extension.',
+    magnification: '40x',
+    tissueType: 'Breast Core',
+    defaultGrade: 'Grade IV (Metastatic)',
+    confidence: 96.5,
+    features: ['Complete Effacement', 'Extranodal Extension', 'Severe Cellular Pleomorphism'],
+    clinical: {
+      age: 48,
+      gender: 'Female',
+      stage: 'Stage IV',
+      smokingHistory: 'Former',
+      survivalMonthsEstimate: 12
+    },
+    genomic: {
+      tp53: 'Mutant',
+      brca1: 'Normal',
+      egfr: 'Amplified'
+    },
+    cells: generateTissueNodes('grade_iv')
   }
 ];
 

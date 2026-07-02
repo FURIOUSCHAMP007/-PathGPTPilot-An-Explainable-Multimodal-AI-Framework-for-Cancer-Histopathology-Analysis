@@ -5,7 +5,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { HistologySample, CellNode, SlideAnnotation } from '../types';
-import { Layers, ShieldCheck, HelpCircle, Eye, EyeOff, Sliders, Cpu, Split, Info, MapPin, Plus, Trash2, Crosshair, Target, X } from 'lucide-react';
+import { Layers, ShieldCheck, HelpCircle, Eye, EyeOff, Sliders, Cpu, Split, Info, MapPin, Plus, Trash2, Crosshair, Target, X, Sparkles, Maximize2, Activity } from 'lucide-react';
 
 interface SlideViewerProps {
   sample: HistologySample;
@@ -21,6 +21,269 @@ interface SlideViewerProps {
   onAddAnnotation: (anno: Omit<SlideAnnotation, 'id' | 'timestamp'>) => void;
   onDeleteAnnotation: (id: string) => void;
 }
+
+// PHYSICAL STAIN COLOR MAPPINGS BASED ON NORMALIZATION & PRESETS
+const getSimulatedColors = (norm: 'raw' | 'macenko' | 'reinhard' | 'ruifrok', preset: 'he' | 'giemsa' | 'trichrome' | 'pas') => {
+  if (preset === 'he') {
+    return {
+      raw: {
+        nuclei: '#4A2E80',
+        atypicalNuclei: '#661166',
+        stroma: '#EAB8CE',
+        gland: '#FFF0F5',
+        glandOutline: '#D47FA6',
+        collagenBand: 'rgba(212, 127, 166, 0.16)',
+        collagenFibril: 'rgba(212, 127, 166, 0.25)',
+        fibroblastCytoplasm: 'rgba(220, 158, 184, 0.25)',
+        fibroblastBorder: 'rgba(212, 127, 166, 0.35)',
+        atypicalHalo: 'rgba(111, 30, 81, 0.12)',
+        benignHalo: 'rgba(74, 46, 128, 0.08)',
+        mitochondria: 'rgba(219, 39, 119, 0.5)'
+      },
+      macenko: {
+        nuclei: '#1C063C',
+        atypicalNuclei: '#5F055F',
+        stroma: '#FCDEF0',
+        gland: '#FFF8FC',
+        glandOutline: '#E39FCE',
+        collagenBand: 'rgba(227, 159, 206, 0.16)',
+        collagenFibril: 'rgba(227, 159, 206, 0.25)',
+        fibroblastCytoplasm: 'rgba(235, 179, 215, 0.25)',
+        fibroblastBorder: 'rgba(227, 159, 206, 0.35)',
+        atypicalHalo: 'rgba(95, 5, 95, 0.12)',
+        benignHalo: 'rgba(28, 6, 60, 0.08)',
+        mitochondria: 'rgba(219, 39, 119, 0.5)'
+      },
+      reinhard: {
+        nuclei: '#273C75',
+        atypicalNuclei: '#6F1E51',
+        stroma: '#DF88A7',
+        gland: '#FFF2F4',
+        glandOutline: '#BA4373',
+        collagenBand: 'rgba(186, 67, 115, 0.16)',
+        collagenFibril: 'rgba(186, 67, 115, 0.25)',
+        fibroblastCytoplasm: 'rgba(214, 114, 149, 0.25)',
+        fibroblastBorder: 'rgba(186, 67, 115, 0.35)',
+        atypicalHalo: 'rgba(111, 30, 81, 0.12)',
+        benignHalo: 'rgba(74, 46, 128, 0.08)',
+        mitochondria: 'rgba(186, 67, 115, 0.6)'
+      },
+      ruifrok: {
+        nuclei: '#0F1A3E',
+        atypicalNuclei: '#5A1E5C',
+        stroma: '#FDF0EC',
+        gland: '#FFFDF9',
+        glandOutline: '#E3A6B4',
+        collagenBand: 'rgba(227, 166, 180, 0.14)',
+        collagenFibril: 'rgba(227, 166, 180, 0.28)',
+        fibroblastCytoplasm: 'rgba(227, 166, 180, 0.22)',
+        fibroblastBorder: 'rgba(15, 26, 62, 0.25)',
+        atypicalHalo: 'rgba(111, 30, 81, 0.12)',
+        benignHalo: 'rgba(74, 46, 128, 0.08)',
+        mitochondria: 'rgba(219, 39, 119, 0.5)'
+      }
+    }[norm];
+  }
+
+  if (preset === 'giemsa') {
+    return {
+      raw: {
+        nuclei: '#1C3144',
+        atypicalNuclei: '#41225B',
+        stroma: '#D0E1FD',
+        gland: '#EBF2FA',
+        glandOutline: '#6E9075',
+        collagenBand: 'rgba(110, 144, 117, 0.14)',
+        collagenFibril: 'rgba(110, 144, 117, 0.24)',
+        fibroblastCytoplasm: 'rgba(165, 190, 230, 0.25)',
+        fibroblastBorder: 'rgba(110, 144, 117, 0.3)',
+        atypicalHalo: 'rgba(65, 34, 91, 0.12)',
+        benignHalo: 'rgba(28, 49, 68, 0.08)',
+        mitochondria: 'rgba(110, 144, 117, 0.5)'
+      },
+      macenko: {
+        nuclei: '#071625',
+        atypicalNuclei: '#250E3E',
+        stroma: '#A3CEF1',
+        gland: '#F1F6F9',
+        glandOutline: '#274C77',
+        collagenBand: 'rgba(27, 76, 119, 0.16)',
+        collagenFibril: 'rgba(27, 76, 119, 0.28)',
+        fibroblastCytoplasm: 'rgba(139, 168, 203, 0.25)',
+        fibroblastBorder: 'rgba(27, 76, 119, 0.35)',
+        atypicalHalo: 'rgba(37, 14, 62, 0.14)',
+        benignHalo: 'rgba(7, 22, 37, 0.1)',
+        mitochondria: 'rgba(27, 76, 119, 0.6)'
+      },
+      reinhard: {
+        nuclei: '#1D2D44',
+        atypicalNuclei: '#491D3E',
+        stroma: '#E1E8EB',
+        gland: '#F4F7F6',
+        glandOutline: '#6B8096',
+        collagenBand: 'rgba(107, 128, 150, 0.16)',
+        collagenFibril: 'rgba(107, 128, 150, 0.25)',
+        fibroblastCytoplasm: 'rgba(149, 165, 180, 0.25)',
+        fibroblastBorder: 'rgba(107, 128, 150, 0.35)',
+        atypicalHalo: 'rgba(73, 29, 62, 0.12)',
+        benignHalo: 'rgba(29, 45, 68, 0.08)',
+        mitochondria: 'rgba(107, 128, 150, 0.55)'
+      },
+      ruifrok: {
+        nuclei: '#0A1128',
+        atypicalNuclei: '#2F1E4B',
+        stroma: '#D9DCD6',
+        gland: '#EBF2FA',
+        glandOutline: '#5A6978',
+        collagenBand: 'rgba(90, 105, 120, 0.14)',
+        collagenFibril: 'rgba(90, 105, 120, 0.28)',
+        fibroblastCytoplasm: 'rgba(128, 140, 155, 0.22)',
+        fibroblastBorder: 'rgba(10, 17, 40, 0.25)',
+        atypicalHalo: 'rgba(47, 30, 75, 0.12)',
+        benignHalo: 'rgba(10, 17, 40, 0.08)',
+        mitochondria: 'rgba(90, 105, 120, 0.5)'
+      }
+    }[norm];
+  }
+
+  if (preset === 'trichrome') {
+    return {
+      raw: {
+        nuclei: '#1C1917',
+        atypicalNuclei: '#3F1212',
+        stroma: '#D2F1F2',
+        gland: '#FFECEC',
+        glandOutline: '#DE2828',
+        collagenBand: 'rgba(43, 128, 181, 0.16)',
+        collagenFibril: 'rgba(43, 128, 181, 0.26)',
+        fibroblastCytoplasm: 'rgba(255, 180, 180, 0.25)',
+        fibroblastBorder: 'rgba(222, 40, 40, 0.35)',
+        atypicalHalo: 'rgba(63, 18, 18, 0.12)',
+        benignHalo: 'rgba(28, 25, 23, 0.08)',
+        mitochondria: 'rgba(222, 40, 40, 0.6)'
+      },
+      macenko: {
+        nuclei: '#090503',
+        atypicalNuclei: '#2D0404',
+        stroma: '#90E0EF',
+        gland: '#FFE3E3',
+        glandOutline: '#FF003C',
+        collagenBand: 'rgba(33, 158, 188, 0.18)',
+        collagenFibril: 'rgba(33, 158, 188, 0.28)',
+        fibroblastCytoplasm: 'rgba(255, 150, 150, 0.25)',
+        fibroblastBorder: 'rgba(255, 0, 60, 0.4)',
+        atypicalHalo: 'rgba(45, 4, 4, 0.14)',
+        benignHalo: 'rgba(9, 5, 3, 0.1)',
+        mitochondria: 'rgba(255, 0, 60, 0.65)'
+      },
+      reinhard: {
+        nuclei: '#22252A',
+        atypicalNuclei: '#401A24',
+        stroma: '#DCEFF2',
+        gland: '#FFEBEE',
+        glandOutline: '#D32F2F',
+        collagenBand: 'rgba(69, 123, 157, 0.16)',
+        collagenFibril: 'rgba(69, 123, 157, 0.25)',
+        fibroblastCytoplasm: 'rgba(229, 115, 115, 0.25)',
+        fibroblastBorder: 'rgba(211, 47, 47, 0.35)',
+        atypicalHalo: 'rgba(64, 26, 36, 0.12)',
+        benignHalo: 'rgba(34, 37, 42, 0.08)',
+        mitochondria: 'rgba(211, 47, 47, 0.55)'
+      },
+      ruifrok: {
+        nuclei: '#121212',
+        atypicalNuclei: '#380404',
+        stroma: '#CAF0F8',
+        gland: '#FFF0F3',
+        glandOutline: '#FF3366',
+        collagenBand: 'rgba(72, 149, 239, 0.16)',
+        collagenFibril: 'rgba(72, 149, 239, 0.28)',
+        fibroblastCytoplasm: 'rgba(255, 180, 200, 0.22)',
+        fibroblastBorder: 'rgba(18, 18, 18, 0.25)',
+        atypicalHalo: 'rgba(56, 4, 4, 0.12)',
+        benignHalo: 'rgba(18, 18, 18, 0.08)',
+        mitochondria: 'rgba(255, 51, 102, 0.5)'
+      }
+    }[norm];
+  }
+
+  if (preset === 'pas') {
+    return {
+      raw: {
+        nuclei: '#2E5077',
+        atypicalNuclei: '#1E3554',
+        stroma: '#FFF0F5',
+        gland: '#FFF5F8',
+        glandOutline: '#E0115F',
+        collagenBand: 'rgba(224, 17, 95, 0.14)',
+        collagenFibril: 'rgba(224, 17, 95, 0.24)',
+        fibroblastCytoplasm: 'rgba(247, 190, 215, 0.25)',
+        fibroblastBorder: 'rgba(224, 17, 95, 0.35)',
+        atypicalHalo: 'rgba(30, 53, 84, 0.1)',
+        benignHalo: 'rgba(46, 80, 119, 0.08)',
+        mitochondria: 'rgba(224, 17, 95, 0.5)'
+      },
+      macenko: {
+        nuclei: '#162C46',
+        atypicalNuclei: '#0C1A2B',
+        stroma: '#FFF3FC',
+        gland: '#FFF8FD',
+        glandOutline: '#FF007F',
+        collagenBand: 'rgba(255, 0, 127, 0.16)',
+        collagenFibril: 'rgba(255, 0, 127, 0.28)',
+        fibroblastCytoplasm: 'rgba(244, 143, 177, 0.25)',
+        fibroblastBorder: 'rgba(255, 0, 127, 0.38)',
+        atypicalHalo: 'rgba(12, 26, 43, 0.12)',
+        benignHalo: 'rgba(22, 44, 70, 0.08)',
+        mitochondria: 'rgba(255, 0, 127, 0.6)'
+      },
+      reinhard: {
+        nuclei: '#284E6E',
+        atypicalNuclei: '#172E45',
+        stroma: '#FDF4F8',
+        gland: '#FFF0F6',
+        glandOutline: '#D81B60',
+        collagenBand: 'rgba(216, 27, 96, 0.16)',
+        collagenFibril: 'rgba(216, 27, 96, 0.25)',
+        fibroblastCytoplasm: 'rgba(240, 98, 146, 0.25)',
+        fibroblastBorder: 'rgba(216, 27, 96, 0.35)',
+        atypicalHalo: 'rgba(23, 46, 69, 0.12)',
+        benignHalo: 'rgba(40, 78, 110, 0.08)',
+        mitochondria: 'rgba(216, 27, 96, 0.55)'
+      },
+      ruifrok: {
+        nuclei: '#3A6B9B',
+        atypicalNuclei: '#264B70',
+        stroma: '#FAEDF0',
+        gland: '#FFF3F5',
+        glandOutline: '#C2185B',
+        collagenBand: 'rgba(194, 24, 91, 0.14)',
+        collagenFibril: 'rgba(194, 24, 91, 0.28)',
+        fibroblastCytoplasm: 'rgba(233, 30, 99, 0.22)',
+        fibroblastBorder: 'rgba(58, 107, 155, 0.25)',
+        atypicalHalo: 'rgba(38, 75, 112, 0.12)',
+        benignHalo: 'rgba(58, 107, 155, 0.08)',
+        mitochondria: 'rgba(194, 24, 91, 0.5)'
+      }
+    }[norm];
+  }
+
+  // Fallback H&E
+  return {
+    nuclei: '#4A2E80',
+    atypicalNuclei: '#661166',
+    stroma: '#EAB8CE',
+    gland: '#FFF0F5',
+    glandOutline: '#D47FA6',
+    collagenBand: 'rgba(212, 127, 166, 0.16)',
+    collagenFibril: 'rgba(212, 127, 166, 0.25)',
+    fibroblastCytoplasm: 'rgba(220, 158, 184, 0.25)',
+    fibroblastBorder: 'rgba(212, 127, 166, 0.35)',
+    atypicalHalo: 'rgba(111, 30, 81, 0.12)',
+    benignHalo: 'rgba(74, 46, 128, 0.08)',
+    mitochondria: 'rgba(219, 39, 119, 0.5)'
+  };
+};
 
 export default function SlideViewer({
   sample,
@@ -43,6 +306,9 @@ export default function SlideViewer({
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  // PHYSICAL STAIN PRESET SIMULATION STATE
+  const [stainPreset, setStainPreset] = useState<'he' | 'giemsa' | 'trichrome' | 'pas'>('he');
+
   // NEW FEATURES STATES: Splitscreen, Cell filters, Grid and Reticle Overlays
   const [splitMode, setSplitMode] = useState<boolean>(false);
   const [splitRatio, setSplitRatio] = useState<number>(0.5); // position from 0 to 1
@@ -54,44 +320,54 @@ export default function SlideViewer({
   const [pinDropMode, setPinDropMode] = useState<boolean>(false);
   const [newAnnotationForm, setNewAnnotationForm] = useState<{ label: string; description: string; x: number; y: number } | null>(null);
 
-  // Reset zoom, pan & advanced states when sample changes
+  // AI SUPER-RESOLUTION & SUBCELLULAR UPSCALING STATES
+  const [upscaleTarget, setUpscaleTarget] = useState<'20x' | '40x' | '80x' | '100x'>('20x');
+  const [upscaleEngine, setUpscaleEngine] = useState<'bilinear' | 'swinir' | 'esrgan' | 'diffusion'>('swinir');
+  const [chromatinDetail, setChromatinDetail] = useState<number>(60);
+  const [envelopeSharpness, setEnvelopeSharpness] = useState<number>(70);
+  const [noiseReduction, setNoiseReduction] = useState<number>(50);
+  const [showSubcellularOverlay, setShowSubcellularOverlay] = useState<boolean>(true);
+  const [isUpscalingProcessing, setIsUpscalingProcessing] = useState<boolean>(false);
+
+  // Reset zoom, pan, stain & advanced states when sample changes
   useEffect(() => {
     setZoomLevel(1);
     setPan({ x: 0, y: 0 });
     setRiskFilterThreshold(0);
+    setUpscaleTarget('20x');
+    setUpscaleEngine('swinir');
+    setStainPreset('he');
   }, [sample]);
 
-  // Color mapping configuration based on selected Normalization
-  const colors = {
-    raw: {
-      nuclei: '#4A2E80', // standard deep violet-purple
-      atypicalNuclei: '#661166', // dark red-purple
-      stroma: '#EAB8CE', // light pink collagen fibers
-      gland: '#FFF0F5', // light lavender blush lumen
-      glandOutline: '#D47FA6'
-    },
-    macenko: {
-      nuclei: '#1C063C', // extremely dark high-contrast purple
-      atypicalNuclei: '#5F055F', // deeper magenta
-      stroma: '#FCDEF0', // light pastel pink
-      gland: '#FFF8FC', // crisp near-white
-      glandOutline: '#E39FCE'
-    },
-    reinhard: {
-      nuclei: '#273C75', // rich royal navy-blue
-      atypicalNuclei: '#6F1E51', // deep wine burgundy
-      stroma: '#DF88A7', // warm peach-pink
-      gland: '#FFF2F4', // warm off-white
-      glandOutline: '#BA4373'
-    },
-    ruifrok: {
-      nuclei: '#0F1A3E', // pure deep Prussian blue stain
-      atypicalNuclei: '#5A1E5C', // deep magenta/purple stain overlap
-      stroma: '#FDF0EC', // pale pink-straw background matrix
-      gland: '#FFFDF9', // pristine ivory fluid gland lumen
-      glandOutline: '#E3A6B4' // eosin outline
-    }
-  }[colorNorm];
+  // Dynamic Maximum Zoom Level based on Upscaling magnification target
+  const maxZoomLevel = {
+    '20x': 3.0,
+    '40x': 6.0,
+    '80x': 12.0,
+    '100x': 20.0,
+  }[upscaleTarget];
+
+  const handleUpscaleChange = (target: '20x' | '40x' | '80x' | '100x') => {
+    if (target === upscaleTarget) return;
+    
+    setIsUpscalingProcessing(true);
+    setTimeout(() => {
+      setIsUpscalingProcessing(false);
+      setUpscaleTarget(target);
+      if (target !== '20x') {
+        const optZoom = target === '40x' ? 2.5 : target === '80x' ? 4.5 : 6.0;
+        setZoomLevel(optZoom);
+        setSplitMode(true);
+        setSplitRatio(0.5);
+      } else {
+        setZoomLevel(1.0);
+        setSplitMode(false);
+      }
+    }, 900);
+  };
+
+  // Color mapping configuration based on selected Normalization & Stain Preset
+  const colors = getSimulatedColors(colorNorm, stainPreset);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -113,13 +389,33 @@ export default function SlideViewer({
     ctx.fillRect(0, 0, 500, 500);
 
     // Render smooth wavy collage bands to represent the extracellular connective tissue matrix
-    ctx.strokeStyle = colorNorm === 'ruifrok' ? 'rgba(227, 166, 180, 0.14)' : colorNorm === 'reinhard' ? 'rgba(186, 67, 115, 0.16)' : colorNorm === 'macenko' ? 'rgba(227, 159, 206, 0.16)' : 'rgba(212, 127, 166, 0.16)';
+    ctx.strokeStyle = colors.collagenBand;
     ctx.lineWidth = 14;
     for (let i = -1; i < 6; i++) {
       ctx.beginPath();
       ctx.moveTo(-50, i * 95);
       ctx.bezierCurveTo(150, i * 95 - 45, 350, i * 95 + 45, 550, i * 95);
       ctx.stroke();
+
+      // DRAW FINE COLLAGEN MICRO-FIBRILS IF AI SUPER-RESOLUTION IS ENGAGED
+      if (upscaleTarget !== '20x' && showSubcellularOverlay) {
+        ctx.save();
+        ctx.strokeStyle = colors.collagenFibril;
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([4, 4]);
+        
+        ctx.beginPath();
+        ctx.moveTo(-50, i * 95 - 12);
+        ctx.bezierCurveTo(150, i * 95 - 57, 350, i * 95 + 33, 550, i * 95 - 12);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(-50, i * 95 + 12);
+        ctx.bezierCurveTo(150, i * 95 - 33, 350, i * 95 + 57, 550, i * 95 + 12);
+        ctx.stroke();
+
+        ctx.restore();
+      }
     }
 
     // Filter status function: checks if a point is on the "RAW" left side of splitscreen wipe
@@ -152,8 +448,8 @@ export default function SlideViewer({
       ctx.scale(3.2, 0.75);
       ctx.beginPath();
       ctx.arc(0, 0, cc.r * 1.1, 0, Math.PI * 2);
-      ctx.fillStyle = colorNorm === 'ruifrok' ? 'rgba(227, 166, 180, 0.22)' : colorNorm === 'reinhard' ? 'rgba(214, 114, 149, 0.25)' : colorNorm === 'macenko' ? 'rgba(235, 179, 215, 0.25)' : 'rgba(220, 158, 184, 0.25)';
-      ctx.strokeStyle = colorNorm === 'ruifrok' ? 'rgba(15, 26, 62, 0.25)' : colorNorm === 'reinhard' ? 'rgba(186, 67, 115, 0.35)' : colorNorm === 'macenko' ? 'rgba(227, 159, 206, 0.35)' : 'rgba(212, 127, 166, 0.35)';
+      ctx.fillStyle = colors.fibroblastCytoplasm;
+      ctx.strokeStyle = colors.fibroblastBorder;
       ctx.lineWidth = 0.5;
       ctx.fill();
       ctx.stroke();
@@ -244,11 +540,12 @@ export default function SlideViewer({
       const nodeOp = getCellOpacity(node.gradingWeight);
       ctx.globalAlpha = nodeOp;
 
+      // Check if this particular node is on the upscale side of splitmode
+      const isUpscaledSide = upscaleTarget !== '20x' && !isPointInRawSide(node.x);
+
       // 1) Pale peri-nuclear cytoplasm halo around each nucleus
       ctx.save();
-      ctx.fillStyle = node.atypical 
-        ? (colorNorm === 'macenko' ? 'rgba(95, 5, 95, 0.12)' : 'rgba(111, 30, 81, 0.12)')
-        : (colorNorm === 'macenko' ? 'rgba(28, 6, 60, 0.08)' : 'rgba(74, 46, 128, 0.08)');
+      ctx.fillStyle = node.atypical ? colors.atypicalHalo : colors.benignHalo;
       ctx.beginPath();
       if (node.atypical) {
         ctx.arc(node.x, node.y, node.r * 2.8, 0, Math.PI * 2);
@@ -257,6 +554,40 @@ export default function SlideViewer({
       }
       ctx.fill();
       ctx.restore();
+
+      // 1b) DRAW HIGH-RESOLUTION MITOCHONDRIA AND CYTOPLASM ORGANELLES (ONLY IN SOTA SUPER-RES MODE)
+      if (isUpscaledSide && showSubcellularOverlay) {
+        ctx.save();
+        // Render 2-3 mitochondria as tiny pinkish-orange ovals in cytoplasm
+        // Using stable random positioning based on node coords
+        let organelleSeed = node.x * 7 + node.y * 31;
+        const count = node.atypical ? 4 : 2;
+        const radius = node.atypical ? node.r * 2.0 : node.r * 1.5;
+        
+        for (let i = 0; i < count; i++) {
+          organelleSeed = (organelleSeed * 9301 + 49297) % 233280;
+          const angle = (organelleSeed / 233280) * Math.PI * 2;
+          organelleSeed = (organelleSeed * 9301 + 49297) % 233280;
+          const dist = node.r * 1.2 + (organelleSeed / 233280) * (radius - node.r * 1.1);
+          
+          const ox = node.x + Math.cos(angle) * dist;
+          const oy = node.y + Math.sin(angle) * dist;
+          
+          ctx.save();
+          ctx.translate(ox, oy);
+          ctx.rotate(angle + Math.PI / 4);
+          ctx.scale(1.8, 0.9);
+          ctx.beginPath();
+          ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
+          ctx.fillStyle = colors.mitochondria;
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+          ctx.lineWidth = 0.3;
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+        ctx.restore();
+      }
 
       // 2) The actual dense Nucleus
       ctx.fillStyle = node.atypical ? colors.atypicalNuclei : colors.nuclei;
@@ -280,20 +611,32 @@ export default function SlideViewer({
 
         // Coarse chromatin granules stippled inside (malignant phenotype marker)
         ctx.fillStyle = 'rgba(20, 0, 20, 0.65)';
-        for (let i = 0; i < 4; i++) {
-          const cx = node.x + (Math.sin(i * 3) * node.r * 0.4);
-          const cy = node.y + (Math.cos(i * 2) * node.r * 0.4);
+        const chromatinGranuleCount = isUpscaledSide ? Math.floor(4 + (chromatinDetail / 20)) : 4;
+        const granuleRadius = isUpscaledSide ? 1.0 + (chromatinDetail / 100) : 1.2;
+        
+        for (let i = 0; i < chromatinGranuleCount; i++) {
+          const cx = node.x + (Math.sin(i * 3) * node.r * 0.45);
+          const cy = node.y + (Math.cos(i * 2.3) * node.r * 0.45);
           ctx.beginPath();
-          ctx.arc(cx, cy, 1.2, 0, Math.PI * 2);
+          ctx.arc(cx, cy, granuleRadius, 0, Math.PI * 2);
           ctx.fill();
         }
 
         // Prominent enlarged nucleoli (active ribosomal RNA synthesis in carcinoma lines)
-        ctx.fillStyle = '#EF4444'; // vivid pathological indicator marker
+        ctx.fillStyle = isUpscaledSide ? `rgba(239, 68, 68, ${0.4 + (chromatinDetail / 150)})` : '#EF4444'; // vivid pathological indicator marker
         ctx.beginPath();
         ctx.arc(node.x - node.r * 0.2, node.y - node.r * 0.15, 1.7, 0, Math.PI * 2);
         ctx.arc(node.x + node.r * 0.25, node.y + node.r * 0.2, 1.3, 0, Math.PI * 2);
         ctx.fill();
+
+        // Extra nuclear envelope sharpness overlay in super resolution
+        if (isUpscaledSide) {
+          ctx.save();
+          ctx.strokeStyle = '#1D031D';
+          ctx.lineWidth = 0.5 + (envelopeSharpness / 50);
+          ctx.stroke();
+          ctx.restore();
+        }
 
       } else {
         // Safe, benign smooth circular spherical nucleus
@@ -302,14 +645,27 @@ export default function SlideViewer({
 
         // Double nuclear envelope layer
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
-        ctx.lineWidth = 1.0;
+        ctx.lineWidth = isUpscaledSide ? 0.4 + (envelopeSharpness / 100) : 1.0;
         ctx.stroke();
 
         // Delicate central nucleolus (benign expression)
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fillStyle = isUpscaledSide ? `rgba(0, 0, 0, ${0.3 + (chromatinDetail / 200)})` : 'rgba(0, 0, 0, 0.4)';
         ctx.beginPath();
         ctx.arc(node.x + node.r * 0.1, node.y - node.r * 0.1, 1.5, 0, Math.PI * 2);
         ctx.fill();
+
+        // Fine granular chromatin background inside standard cell
+        if (isUpscaledSide && showSubcellularOverlay) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+          const count = Math.floor(3 + (chromatinDetail / 25));
+          for (let i = 0; i < count; i++) {
+            const cx = node.x + (Math.sin(i * 1.7) * node.r * 0.5);
+            const cy = node.y + (Math.cos(i * 2.1) * node.r * 0.5);
+            ctx.beginPath();
+            ctx.arc(cx, cy, 0.7, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
       }
       
       ctx.restore();
@@ -533,6 +889,34 @@ export default function SlideViewer({
 
     // 6. Draw vertical split separator if active
     if (splitMode) {
+      // IF UPSCALE TARGET > 20x, DRAW THE RAW SIDE SENSOR PIXELATION GRID!
+      if (upscaleTarget !== '20x') {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+        ctx.lineWidth = 0.5;
+        // Only draw on the left side (0 to 500 * splitRatio)
+        const limitX = 500 * splitRatio;
+        const gridSpacing = Math.max(2, 10 / (zoomLevel * 0.4)); // dynamic camera sensor grid pixels spacing
+        
+        ctx.beginPath();
+        // vertical lines
+        for (let gx = 0; gx < limitX; gx += gridSpacing) {
+          ctx.moveTo(gx, 0);
+          ctx.lineTo(gx, 500);
+        }
+        // horizontal lines
+        for (let gy = 0; gy < 500; gy += gridSpacing) {
+          ctx.moveTo(0, gy);
+          ctx.lineTo(limitX, gy);
+        }
+        ctx.stroke();
+        
+        // Subtle raw scan-blur filter overlay
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+        ctx.fillRect(0, 0, limitX, 500);
+        ctx.restore();
+      }
+
       ctx.save();
       ctx.strokeStyle = '#3B82F6'; // vivid blue divider
       ctx.lineWidth = 2.5;
@@ -556,9 +940,11 @@ export default function SlideViewer({
       ctx.strokeRect(tagX, 12, tagWidth, 22);
       
       ctx.fillStyle = '#C9D1D9';
-      ctx.font = 'bold 8px monospace';
+      ctx.font = 'bold 7px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('RAW H&E  |  AI ASSIST', tagX + tagWidth / 2, 26);
+      const leftLabel = `RAW ${sample.magnification}`;
+      const rightLabel = upscaleTarget !== '20x' ? `AI ${upscaleTarget} ${upscaleEngine.toUpperCase()}` : 'AI ASSIST';
+      ctx.fillText(`${leftLabel} | ${rightLabel}`, tagX + tagWidth / 2, 25);
       ctx.restore();
     }
 
@@ -754,7 +1140,7 @@ export default function SlideViewer({
       
       ctx.restore();
     }
-  }, [sample, colorNorm, segmentationActive, segmentationOpacity, xaiMode, hoveredCell, zoomLevel, pan, splitMode, splitRatio, riskFilterThreshold, annotations, showGridOverlay, showReticle]);
+  }, [sample, colorNorm, stainPreset, segmentationActive, segmentationOpacity, xaiMode, hoveredCell, zoomLevel, pan, splitMode, splitRatio, riskFilterThreshold, annotations, showGridOverlay, showReticle, upscaleTarget, upscaleEngine, chromatinDetail, envelopeSharpness, noiseReduction, showSubcellularOverlay, isUpscalingProcessing]);
 
   // Handle canvas mouse move to locate nodes
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -923,6 +1309,36 @@ export default function SlideViewer({
             </div>
           </div>
 
+          {/* PHYSICAL STAIN SIMULATION PRESETS */}
+          <div>
+            <label className="block text-[10px] font-bold text-[#8B949E] uppercase tracking-wider mb-1 flex items-center gap-1.5" title="Simulate physical slide preparation stains">
+              <Layers className="w-3 h-3 text-blue-500" />
+              Physical Stain Presets
+            </label>
+            <div className="grid grid-cols-4 gap-1 bg-[#010409] border border-[#1F2937] p-1 rounded">
+              {[
+                { id: 'he', label: 'H&E', tooltip: 'Hematoxylin & Eosin: Standard diagnostic tissue stain' },
+                { id: 'giemsa', label: 'Giemsa', tooltip: 'Giemsa Stain: High nuclear and pathogen resolution' },
+                { id: 'trichrome', label: 'Masson', tooltip: "Masson's Trichrome: Distinct blue collagen connective tissue" },
+                { id: 'pas', label: 'PAS', tooltip: 'Periodic Acid-Schiff: Vibrant fuchsia mucins & membranes' }
+              ].map((preset) => (
+                <button
+                  key={preset.id}
+                  id={`btn_stain_preset_${preset.id}`}
+                  onClick={() => setStainPreset(preset.id as any)}
+                  className={`py-1 text-[9px] font-semibold rounded capitalize transition-all duration-150 cursor-pointer ${
+                    stainPreset === preset.id
+                      ? 'bg-blue-600 text-white shadow-sm font-bold border border-blue-500/50'
+                      : 'text-[#8B949E] hover:text-white hover:bg-[#161B22] border border-transparent'
+                  }`}
+                  title={preset.tooltip}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* ADVANCED RISK FILTERING SLIDER */}
           <div className="bg-[#11161D] border border-[#30363D] rounded-lg p-2.5">
             <div className="flex justify-between items-center text-[10px] font-bold text-[#C9D1D9] uppercase tracking-wider mb-1">
@@ -945,7 +1361,156 @@ export default function SlideViewer({
               className="w-full h-1 bg-[#010409] rounded appearance-none cursor-pointer accent-blue-500"
             />
           </div>
- 
+
+          {/* SOTA AI SUPER-RESOLUTION & SUBCELLULAR UPSCALER */}
+          <div className="border border-[#30363D] rounded-lg p-2.5 bg-[#11161D] flex flex-col space-y-2.5 relative overflow-hidden" id="sota-upscaler-panel">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-blue-400 flex items-center gap-1.5 uppercase tracking-wide">
+                <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+                AI Super-Resolution (SOTA)
+              </span>
+              <span className="text-[8px] font-mono bg-blue-950/40 text-blue-300 border border-blue-900/40 px-1 py-0.2 rounded font-black">
+                WSI-UP v3.2
+              </span>
+            </div>
+
+            {/* Magnification Level Selectors */}
+            <div className="space-y-1.5">
+              <span className="block text-[8px] text-[#8B949E] uppercase tracking-wider font-bold">Magnification Level Target:</span>
+              <div className="grid grid-cols-4 gap-1">
+                {(['20x', '40x', '80x', '100x'] as const).map((mag) => (
+                  <button
+                    key={mag}
+                    type="button"
+                    onClick={() => handleUpscaleChange(mag)}
+                    className={`py-1 text-[9px] font-bold rounded border transition-all flex flex-col items-center justify-center cursor-pointer ${
+                      upscaleTarget === mag
+                        ? 'bg-blue-600 text-white border-blue-500 shadow'
+                        : 'bg-[#010409] text-[#8B949E] border-[#1F2937] hover:border-blue-900 hover:text-white'
+                    }`}
+                  >
+                    <span>{mag}</span>
+                    <span className="text-[6px] font-mono font-normal opacity-75">
+                      {mag === '20x' ? 'Base' : mag === '40x' ? 'SwinIR' : mag === '80x' ? 'ESRGAN' : 'Oil Imm.'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Simulated Deep Learning Progress Bar */}
+            {isUpscalingProcessing && (
+              <div className="absolute inset-0 bg-[#0D1117]/95 flex flex-col items-center justify-center p-3 z-20 space-y-2">
+                <Activity className="w-5 h-5 text-blue-400 animate-spin" />
+                <div className="w-full max-w-[120px] bg-[#010409] h-1.5 rounded-full overflow-hidden border border-[#1F2937]">
+                  <div className="bg-blue-500 h-full animate-pulse rounded-full" style={{ width: '80%' }} />
+                </div>
+                <span className="text-[8px] font-mono text-blue-400 font-bold uppercase animate-pulse">
+                  {upscaleTarget === '20x' ? 'SwinIR-Pathology v3' : upscaleTarget === '40x' ? 'ESRGAN-Generative Edge' : 'Latent Diffusion Denoising'}...
+                </span>
+              </div>
+            )}
+
+            {/* Model and Parameter Adjusters (only shown when magnification is enhanced) */}
+            {upscaleTarget !== '20x' && (
+              <div className="space-y-2 pt-1 border-t border-[#1F2937] text-[9px] animate-fade-in">
+                {/* AI Algorithm selector */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[#8B949E] uppercase font-bold">
+                    <span>Upscaling Engine:</span>
+                    <span className="font-mono text-[8px] text-blue-400">{upscaleEngine.toUpperCase()}</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-0.5 bg-[#010409] border border-[#1F2937] p-0.5 rounded">
+                    {(['bilinear', 'swinir', 'esrgan', 'diffusion'] as const).map((eng) => (
+                      <button
+                        key={eng}
+                        type="button"
+                        onClick={() => setUpscaleEngine(eng)}
+                        className={`py-0.5 text-[7px] font-bold rounded uppercase transition-all ${
+                          upscaleEngine === eng
+                            ? 'bg-blue-600/95 text-white'
+                            : 'text-[#8B949E] hover:text-white hover:bg-[#161B22]'
+                        }`}
+                      >
+                        {eng === 'bilinear' ? 'Legacy' : eng === 'swinir' ? 'Swin' : eng === 'esrgan' ? 'GAN' : 'Diff'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Parameters sliders */}
+                {upscaleEngine !== 'bilinear' && (
+                  <div className="space-y-1.5 pt-0.5">
+                    {/* Chromatin slider */}
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between text-[#8B949E] uppercase font-bold">
+                        <span>Chromatin Detail:</span>
+                        <span className="font-mono text-blue-400 font-bold">{chromatinDetail}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="20"
+                        max="100"
+                        step="10"
+                        value={chromatinDetail}
+                        onChange={(e) => setChromatinDetail(parseInt(e.target.value))}
+                        className="w-full h-1 bg-[#010409] rounded appearance-none cursor-pointer accent-blue-500"
+                      />
+                    </div>
+
+                    {/* Nuclear membrane slider */}
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between text-[#8B949E] uppercase font-bold">
+                        <span>Membrane Sharpness:</span>
+                        <span className="font-mono text-blue-400 font-bold">{envelopeSharpness}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="20"
+                        max="100"
+                        step="10"
+                        value={envelopeSharpness}
+                        onChange={(e) => setEnvelopeSharpness(parseInt(e.target.value))}
+                        className="w-full h-1 bg-[#010409] rounded appearance-none cursor-pointer accent-blue-500"
+                      />
+                    </div>
+
+                    {/* Noise slider */}
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between text-[#8B949E] uppercase font-bold">
+                        <span>Denoise & Smooth:</span>
+                        <span className="font-mono text-blue-400 font-bold">{noiseReduction}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="10"
+                        max="90"
+                        step="10"
+                        value={noiseReduction}
+                        onChange={(e) => setNoiseReduction(parseInt(e.target.value))}
+                        className="w-full h-1 bg-[#010409] rounded appearance-none cursor-pointer accent-blue-500"
+                      />
+                    </div>
+
+                    {/* Subcellular elements toggle */}
+                    <div className="flex items-center justify-between pt-0.5">
+                      <span className="text-[#8B949E] uppercase font-bold flex items-center gap-1">
+                        <Activity className="w-3 h-3 text-pink-400" />
+                        Subcellular Organelles
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={showSubcellularOverlay}
+                        onChange={(e) => setShowSubcellularOverlay(e.target.checked)}
+                        className="rounded bg-[#010409] border-[#30363D] text-blue-600 focus:ring-0 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* SwinUNETR Segmentation Switch */}
           <div className="border border-[#30363D] rounded-lg p-2.5 bg-[#11161D] flex flex-col space-y-1.5">
             <div className="flex items-center justify-between">
