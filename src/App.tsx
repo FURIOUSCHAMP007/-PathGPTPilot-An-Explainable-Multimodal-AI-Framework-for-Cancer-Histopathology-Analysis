@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { SAMPLE_SLIDES, AVAILABLE_MODELS, generateTissueNodes } from './data';
 import { HistologySample, GenomicData, ClinicalData, PathologyReport, SlideAnnotation } from './types';
 import SlideViewer from './components/SlideViewer';
@@ -14,6 +14,9 @@ import ResearchRoadmap from './components/ResearchRoadmap';
 import BatchReportModal from './components/BatchReportModal';
 import DeepInsightsModal from './components/DeepInsightsModal';
 import SidebarAssistant from './components/SidebarAssistant';
+import IEEEAcademicSuite from './components/IEEEAcademicSuite';
+
+const EMPTY_ARRAY: any[] = [];
 import { 
   ResponsiveContainer, 
   LineChart, 
@@ -68,11 +71,13 @@ import {
   Columns,
   ArrowUpDown,
   Download,
-  Award
+  Award,
+  Code2
 } from 'lucide-react';
 
 export default function App() {
-  const [activePage, setActivePage] = useState<'home' | 'registry' | 'stage' | 'molecular' | 'reports' | 'roadmap'>('home');
+  const [devMode, setDevMode] = useState<boolean>(false);
+  const [activePage, setActivePage] = useState<'home' | 'registry' | 'stage' | 'molecular' | 'reports' | 'roadmap' | 'ieee'>('home');
   const [homeSelectedPhase, setHomeSelectedPhase] = useState<number>(1);
   const [selectedSampleId, setSelectedSampleId] = useState<string>(SAMPLE_SLIDES[0].id);
   const [samples, setSamples] = useState<HistologySample[]>(SAMPLE_SLIDES);
@@ -102,6 +107,9 @@ export default function App() {
   
   // Batch Print & Cohort states
   const [batchSelectedIds, setBatchSelectedIds] = useState<string[]>([]);
+  const selectedBatchSamples = useMemo(() => {
+    return samples.filter(s => batchSelectedIds.includes(s.id));
+  }, [samples, batchSelectedIds]);
   const [isBatchReportOpen, setIsBatchReportOpen] = useState<boolean>(false);
   const [isDeepInsightsOpen, setIsDeepInsightsOpen] = useState<boolean>(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
@@ -119,6 +127,7 @@ export default function App() {
 
   // Physician notes map
   const [physicianNotes, setPhysicianNotes] = useState<Record<string, string>>({});
+  const [isDraggingOverEditor, setIsDraggingOverEditor] = useState<boolean>(false);
 
   // ML Accuracy Diagnostician state variables
   const [isAccuracyModalOpen, setIsAccuracyModalOpen] = useState<boolean>(false);
@@ -298,6 +307,53 @@ export default function App() {
     if (editorRef.current) {
       const html = editorRef.current.innerHTML;
       setPhysicianNotes(prev => ({ ...prev, [selectedSampleId]: html }));
+    }
+  };
+
+  const handleEditorDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!isDraggingOverEditor) {
+      setIsDraggingOverEditor(true);
+    }
+  };
+
+  const handleEditorDragLeave = () => {
+    setIsDraggingOverEditor(false);
+  };
+
+  const handleEditorDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOverEditor(false);
+    const html = e.dataTransfer.getData('text/html');
+    const text = e.dataTransfer.getData('text/plain');
+
+    if (editorRef.current) {
+      editorRef.current.focus();
+
+      // Find the range at the drop point
+      let range: Range | null = null;
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(e.clientX, e.clientY);
+      } else if ((e as any).rangeParent) {
+        range = document.createRange();
+        range.setStart((e as any).rangeParent, (e as any).rangeOffset);
+      }
+
+      const selection = window.getSelection();
+      if (selection && range) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+
+      if (html) {
+        // Strip out any surrounding browser garbage if there's any, or insert as-is.
+        // Usually, inserting html directly works perfectly.
+        document.execCommand('insertHTML', false, html);
+      } else if (text) {
+        document.execCommand('insertText', false, text);
+      }
+      handleEditorInput();
     }
   };
 
@@ -908,6 +964,32 @@ export default function App() {
               ))}
             </select>
           </div>
+          {/* Global Dev Mode Toggle Switch */}
+          <div className="flex items-center gap-2 bg-[#161B22] border border-[#30363D] px-2.5 py-1 rounded-lg">
+            <Code2 className={`w-3.5 h-3.5 ${devMode ? 'text-amber-500' : 'text-[#8B949E]'}`} />
+            <span className="text-[10px] text-[#8B949E] uppercase font-bold tracking-wider">Dev Mode</span>
+            <button
+              onClick={() => {
+                const nextVal = !devMode;
+                setDevMode(nextVal);
+                // Reset active page if navigating a hidden dev page
+                if (!nextVal && (activePage === 'ieee' || activePage === 'roadmap')) {
+                  setActivePage('home');
+                }
+              }}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                devMode ? 'bg-amber-500' : 'bg-gray-700'
+              }`}
+              id="dev-mode-toggle"
+              title="Toggle between Pathologist Diagnostic view and Engineering/Research view"
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  devMode ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
           <div className="items-center gap-2 hidden lg:flex">
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
             <span className="text-[#C9D1D9]">SWINUNETR CORE: ACTIVE</span>
@@ -974,17 +1056,33 @@ export default function App() {
             <FileText className="w-4 h-4" />
             Clinician Desk
           </button>
-          <button
-            onClick={() => setActivePage('roadmap')}
-            className={`flex items-center gap-2 px-3 md:px-4 h-full text-xs font-bold uppercase transition-all border-b-2 flex-shrink-0 whitespace-nowrap ${
-              activePage === 'roadmap' 
-                ? 'border-blue-500 text-blue-400 bg-blue-950/10' 
-                : 'border-transparent text-[#8B949E] hover:text-[#C9D1D9]'
-            }`}
-          >
-            <Beaker className="w-4 h-4" />
-            Research Labs
-          </button>
+          {devMode && (
+            <>
+              <button
+                onClick={() => setActivePage('roadmap')}
+                className={`flex items-center gap-2 px-3 md:px-4 h-full text-xs font-bold uppercase transition-all border-b-2 flex-shrink-0 whitespace-nowrap ${
+                  activePage === 'roadmap' 
+                    ? 'border-blue-500 text-blue-400 bg-blue-950/10' 
+                    : 'border-transparent text-[#8B949E] hover:text-[#C9D1D9]'
+                }`}
+              >
+                <Beaker className="w-4 h-4" />
+                Research Labs
+              </button>
+              <button
+                onClick={() => setActivePage('ieee')}
+                className={`flex items-center gap-2 px-3 md:px-4 h-full text-xs font-bold uppercase transition-all border-b-2 flex-shrink-0 whitespace-nowrap ${
+                  activePage === 'ieee' 
+                    ? 'border-blue-500 text-amber-400 bg-blue-950/10' 
+                    : 'border-transparent text-[#8B949E] hover:text-[#C9D1D9]'
+                }`}
+                id="nav-ieee-suite-btn"
+              >
+                <Award className="w-4 h-4 text-amber-400 animate-pulse" />
+                IEEE Academic Suite
+              </button>
+            </>
+          )}
         </div>
 
         {/* Global Active Patient Specimen Quick Selector (Visible in non-registry screens) */}
@@ -3332,7 +3430,7 @@ export default function App() {
           <div className="space-y-6">
             
             {/* Laboratory Dashboard KPI Widget Panels */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4" id="kpi-widget-panels">
+            <div className={`grid grid-cols-1 ${devMode ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`} id="kpi-widget-panels">
               <div className="bg-[#0D1117] border border-[#1F2937] p-4 rounded-xl flex items-center justify-between">
                 <div>
                   <span className="block text-[10px] font-bold text-[#8B949E] uppercase tracking-wide">Total Active Cases</span>
@@ -3370,202 +3468,204 @@ export default function App() {
                 </div>
               </div>
 
-              <div 
-                onClick={() => {
-                  setIsAccuracyModalOpen(true);
-                  // Default testing sample to first active sample
-                  if (samples.length > 0) {
-                    setTestingSampleId(samples[0].id);
-                  }
+              {devMode && (
+                <div 
+                  onClick={() => {
+                    setIsAccuracyModalOpen(true);
+                    // Default testing sample to first active sample
+                    if (samples.length > 0) {
+                      setTestingSampleId(samples[0].id);
+                    }
 
-                  // Keep accuracy breakdown tooltip open for 3 seconds
-                  setAccuracyTooltipSticky(true);
-                  if (accuracyTooltipTimeoutRef.current) {
-                    clearTimeout(accuracyTooltipTimeoutRef.current);
-                  }
-                  accuracyTooltipTimeoutRef.current = setTimeout(() => {
-                    setAccuracyTooltipSticky(false);
-                  }, 3000);
-                }}
-                className="relative bg-[#0D1117] border border-[#1F2937] hover:border-blue-500 hover:bg-[#161B22]/50 p-4 rounded-xl flex items-center justify-between cursor-pointer transition-all shadow-sm group select-none"
-                id="monai-accuracy-card"
-              >
-                <div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="block text-[10px] font-bold text-[#8B949E] group-hover:text-blue-400 uppercase tracking-wide transition-colors">MONAI Computational Accuracy</span>
-                    {accuracyTooltipSticky && (
-                      <span className="flex items-center gap-0.5 bg-blue-500/10 text-blue-400 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border border-blue-500/20 animate-pulse">
-                        <Lock className="w-2.5 h-2.5" />
-                        PINNED
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-2xl font-mono font-black text-white group-hover:text-blue-400 transition-colors">93.8%</span>
-                  <span className="block text-[9px] text-blue-400 font-semibold mt-1">
-                    {accuracyTooltipSticky ? 'Tooltip locked open (3s) • Click to verify' : 'Deep segmentation mean Dice • Click to verify'}
-                  </span>
-                </div>
-                <div className="p-3 bg-blue-950/20 border border-blue-900/40 rounded-lg text-blue-400 group-hover:bg-blue-900/20 group-hover:border-blue-500 transition-all">
-                  <BrainCircuit className="w-5 h-5" />
-                </div>
-
-                {/* Custom Hover Tooltip */}
-                <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-80 bg-[#161B22] border border-[#30363D] rounded-xl shadow-2xl p-4 transition-all duration-200 transform z-50 ${
-                  accuracyTooltipSticky
-                    ? 'pointer-events-auto opacity-100 translate-y-0'
-                    : 'pointer-events-none group-hover:pointer-events-auto opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0'
-                }`}>
-                  <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-[#30363D]">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
-                      <span className="text-[11px] font-bold text-white uppercase tracking-wider font-mono">MONAI Accuracy Breakdown</span>
+                    // Keep accuracy breakdown tooltip open for 3 seconds
+                    setAccuracyTooltipSticky(true);
+                    if (accuracyTooltipTimeoutRef.current) {
+                      clearTimeout(accuracyTooltipTimeoutRef.current);
+                    }
+                    accuracyTooltipTimeoutRef.current = setTimeout(() => {
+                      setAccuracyTooltipSticky(false);
+                    }, 3000);
+                  }}
+                  className="relative bg-[#0D1117] border border-[#1F2937] hover:border-blue-500 hover:bg-[#161B22]/50 p-4 rounded-xl flex items-center justify-between cursor-pointer transition-all shadow-sm group select-none"
+                  id="monai-accuracy-card"
+                >
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="block text-[10px] font-bold text-[#8B949E] group-hover:text-blue-400 uppercase tracking-wide transition-colors">MONAI Computational Accuracy</span>
+                      {accuracyTooltipSticky && (
+                        <span className="flex items-center gap-0.5 bg-blue-500/10 text-blue-400 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border border-blue-500/20 animate-pulse">
+                          <Lock className="w-2.5 h-2.5" />
+                          PINNED
+                        </span>
+                      )}
                     </div>
-                    {accuracyTooltipSticky && (
-                      <div className="flex items-center gap-1 text-blue-400 text-[9px] font-mono font-bold bg-blue-500/5 px-1.5 py-0.5 rounded border border-blue-500/10">
-                        <Lock className="w-3 h-3" />
-                        Pinned
+                    <span className="text-2xl font-mono font-black text-white group-hover:text-blue-400 transition-colors">93.8%</span>
+                    <span className="block text-[9px] text-blue-400 font-semibold mt-1">
+                      {accuracyTooltipSticky ? 'Tooltip locked open (3s) • Click to verify' : 'Deep segmentation mean Dice • Click to verify'}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-blue-950/20 border border-blue-900/40 rounded-lg text-blue-400 group-hover:bg-blue-900/20 group-hover:border-blue-500 transition-all">
+                    <BrainCircuit className="w-5 h-5" />
+                  </div>
+
+                  {/* Custom Hover Tooltip */}
+                  <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-80 bg-[#161B22] border border-[#30363D] rounded-xl shadow-2xl p-4 transition-all duration-200 transform z-50 ${
+                    accuracyTooltipSticky
+                      ? 'pointer-events-auto opacity-100 translate-y-0'
+                      : 'pointer-events-none group-hover:pointer-events-auto opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0'
+                  }`}>
+                    <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-[#30363D]">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
+                        <span className="text-[11px] font-bold text-white uppercase tracking-wider font-mono">MONAI Accuracy Breakdown</span>
                       </div>
-                    )}
-                  </div>
-                  
-                  <table className="w-full text-left text-[11px] font-mono mb-2">
-                    <thead>
-                      <tr className="text-[#8B949E] border-b border-[#30363D] pb-1">
-                        <th className="pb-1 font-bold">Metric / Task</th>
-                        <th className="pb-1 text-center font-bold">Base</th>
-                        <th className="pb-1 text-center font-bold px-1">History</th>
-                        <th className="pb-1 text-right font-bold">Current</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#21262D]/60 text-gray-300">
-                      <tr>
-                        <td className="py-1.5 text-blue-400 font-medium">Segmentation (Mean Dice)</td>
-                        <td className="py-1.5 text-center text-[#8B949E]">92.8%</td>
-                        <td className="py-1.5 px-1 text-center">
-                          <div className="flex justify-center items-center h-full" title="History (last 5 versions): 91.0% → 91.8% → 92.8% → 93.5% → 94.2%">
-                            <svg className="w-12 h-4 overflow-visible" viewBox="0 0 50 16">
-                              <path
-                                d="M 2 14 L 2 13 L 13 10 L 25 7 L 36 4 L 48 2 L 48 14 Z"
-                                fill="rgba(52, 211, 153, 0.15)"
-                              />
-                              <path
-                                d="M 2 13 L 13 10 L 25 7 L 36 4 L 48 2"
-                                fill="none"
-                                stroke="#34D399"
-                                strokeWidth="1.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                              <circle cx="48" cy="2" r="2" fill="#34D399" className="animate-pulse" />
-                            </svg>
-                          </div>
-                        </td>
-                        <td className="py-1.5 text-right font-bold text-white">
-                          <div className="flex items-center justify-end gap-1">
-                            <span>94.2%</span>
-                            <span className="flex items-center text-emerald-400 text-[10px]" title="Improved by +1.4% from baseline">
-                              <TrendingUp className="w-3 h-3 ml-0.5" />
-                              <span className="text-[9px] font-bold">+1.4%</span>
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="py-1.5 text-purple-400 font-medium">Atypical Grading (F1-score)</td>
-                        <td className="py-1.5 text-center text-[#8B949E]">93.1%</td>
-                        <td className="py-1.5 px-1 text-center">
-                          <div className="flex justify-center items-center h-full" title="History (last 5 versions): 90.5% → 91.2% → 93.1% → 92.9% → 92.5%">
-                            <svg className="w-12 h-4 overflow-visible" viewBox="0 0 50 16">
-                              <path
-                                d="M 2 14 L 2 12 L 13 10 L 25 3 L 36 5 L 48 7 L 48 14 Z"
-                                fill="rgba(251, 113, 133, 0.15)"
-                              />
-                              <path
-                                d="M 2 12 L 13 10 L 25 3 L 36 5 L 48 7"
-                                fill="none"
-                                stroke="#FB7185"
-                                strokeWidth="1.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                              <circle cx="48" cy="7" r="2" fill="#FB7185" />
-                            </svg>
-                          </div>
-                        </td>
-                        <td className="py-1.5 text-right font-bold text-white">
-                          <div className="flex items-center justify-end gap-1">
-                            <span>92.5%</span>
-                            <span className="flex items-center text-rose-400 text-[10px]" title="Decreased by -0.6% from baseline">
-                              <TrendingDown className="w-3 h-3 ml-0.5" />
-                              <span className="text-[9px] font-bold">-0.6%</span>
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="py-1.5 text-emerald-400 font-medium">Glandular Detection (mAP)</td>
-                        <td className="py-1.5 text-center text-[#8B949E]">92.6%</td>
-                        <td className="py-1.5 px-1 text-center">
-                          <div className="flex justify-center items-center h-full" title="History (last 5 versions): 89.5% → 91.0% → 92.6% → 93.8% → 94.7%">
-                            <svg className="w-12 h-4 overflow-visible" viewBox="0 0 50 16">
-                              <path
-                                d="M 2 14 L 2 14 L 13 10 L 25 6 L 36 3 L 48 1 L 48 14 Z"
-                                fill="rgba(52, 211, 153, 0.15)"
-                              />
-                              <path
-                                d="M 2 14 L 13 10 L 25 6 L 36 3 L 48 1"
-                                fill="none"
-                                stroke="#34D399"
-                                strokeWidth="1.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                              <circle cx="48" cy="1" r="2" fill="#34D399" className="animate-pulse" />
-                            </svg>
-                          </div>
-                        </td>
-                        <td className="py-1.5 text-right font-bold text-white">
-                          <div className="flex items-center justify-end gap-1">
-                            <span>94.7%</span>
-                            <span className="flex items-center text-emerald-400 text-[10px]" title="Improved by +2.1% from baseline">
-                              <TrendingUp className="w-3 h-3 ml-0.5" />
-                              <span className="text-[9px] font-bold">+2.1%</span>
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-
-                  <div className="flex items-center justify-between text-[10px] text-[#8B949E] bg-[#0D1117]/80 rounded p-1.5 border border-[#21262D]/60 font-sans mt-2">
-                    <span>Overall Combined Score:</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono font-bold text-white">93.8% Mean</span>
-                      <span className="flex items-center text-emerald-400 text-[9px] font-mono font-bold bg-emerald-950/30 px-1 py-0.5 rounded border border-emerald-900/30" title="Overall net progress +1.0% from baseline">
-                        <TrendingUp className="w-2.5 h-2.5 mr-0.5" />
-                        <span>+1.0%</span>
-                      </span>
+                      {accuracyTooltipSticky && (
+                        <div className="flex items-center gap-1 text-blue-400 text-[9px] font-mono font-bold bg-blue-500/5 px-1.5 py-0.5 rounded border border-blue-500/10">
+                          <Lock className="w-3 h-3" />
+                          Pinned
+                        </div>
+                      )}
                     </div>
+                    
+                    <table className="w-full text-left text-[11px] font-mono mb-2">
+                      <thead>
+                        <tr className="text-[#8B949E] border-b border-[#30363D] pb-1">
+                          <th className="pb-1 font-bold">Metric / Task</th>
+                          <th className="pb-1 text-center font-bold">Base</th>
+                          <th className="pb-1 text-center font-bold px-1">History</th>
+                          <th className="pb-1 text-right font-bold">Current</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#21262D]/60 text-gray-300">
+                        <tr>
+                          <td className="py-1.5 text-blue-400 font-medium">Segmentation (Mean Dice)</td>
+                          <td className="py-1.5 text-center text-[#8B949E]">92.8%</td>
+                          <td className="py-1.5 px-1 text-center">
+                            <div className="flex justify-center items-center h-full" title="History (last 5 versions): 91.0% → 91.8% → 92.8% → 93.5% → 94.2%">
+                              <svg className="w-12 h-4 overflow-visible" viewBox="0 0 50 16">
+                                <path
+                                  d="M 2 14 L 2 13 L 13 10 L 25 7 L 36 4 L 48 2 L 48 14 Z"
+                                  fill="rgba(52, 211, 153, 0.15)"
+                                />
+                                <path
+                                  d="M 2 13 L 13 10 L 25 7 L 36 4 L 48 2"
+                                  fill="none"
+                                  stroke="#34D399"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                                <circle cx="48" cy="2" r="2" fill="#34D399" className="animate-pulse" />
+                              </svg>
+                            </div>
+                          </td>
+                          <td className="py-1.5 text-right font-bold text-white">
+                            <div className="flex items-center justify-end gap-1">
+                              <span>94.2%</span>
+                              <span className="flex items-center text-emerald-400 text-[10px]" title="Improved by +1.4% from baseline">
+                                <TrendingUp className="w-3 h-3 ml-0.5" />
+                                <span className="text-[9px] font-bold">+1.4%</span>
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-1.5 text-purple-400 font-medium">Atypical Grading (F1-score)</td>
+                          <td className="py-1.5 text-center text-[#8B949E]">93.1%</td>
+                          <td className="py-1.5 px-1 text-center">
+                            <div className="flex justify-center items-center h-full" title="History (last 5 versions): 90.5% → 91.2% → 93.1% → 92.9% → 92.5%">
+                              <svg className="w-12 h-4 overflow-visible" viewBox="0 0 50 16">
+                                <path
+                                  d="M 2 14 L 2 12 L 13 10 L 25 3 L 36 5 L 48 7 L 48 14 Z"
+                                  fill="rgba(251, 113, 133, 0.15)"
+                                />
+                                <path
+                                  d="M 2 12 L 13 10 L 25 3 L 36 5 L 48 7"
+                                  fill="none"
+                                  stroke="#FB7185"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                                <circle cx="48" cy="7" r="2" fill="#FB7185" />
+                              </svg>
+                            </div>
+                          </td>
+                          <td className="py-1.5 text-right font-bold text-white">
+                            <div className="flex items-center justify-end gap-1">
+                              <span>92.5%</span>
+                              <span className="flex items-center text-rose-400 text-[10px]" title="Decreased by -0.6% from baseline">
+                                <TrendingDown className="w-3 h-3 ml-0.5" />
+                                <span className="text-[9px] font-bold">-0.6%</span>
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-1.5 text-emerald-400 font-medium">Glandular Detection (mAP)</td>
+                          <td className="py-1.5 text-center text-[#8B949E]">92.6%</td>
+                          <td className="py-1.5 px-1 text-center">
+                            <div className="flex justify-center items-center h-full" title="History (last 5 versions): 89.5% → 91.0% → 92.6% → 93.8% → 94.7%">
+                              <svg className="w-12 h-4 overflow-visible" viewBox="0 0 50 16">
+                                <path
+                                  d="M 2 14 L 2 14 L 13 10 L 25 6 L 36 3 L 48 1 L 48 14 Z"
+                                  fill="rgba(52, 211, 153, 0.15)"
+                                />
+                                <path
+                                  d="M 2 14 L 13 10 L 25 6 L 36 3 L 48 1"
+                                  fill="none"
+                                  stroke="#34D399"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                                <circle cx="48" cy="1" r="2" fill="#34D399" className="animate-pulse" />
+                              </svg>
+                            </div>
+                          </td>
+                          <td className="py-1.5 text-right font-bold text-white">
+                            <div className="flex items-center justify-end gap-1">
+                              <span>94.7%</span>
+                              <span className="flex items-center text-emerald-400 text-[10px]" title="Improved by +2.1% from baseline">
+                                <TrendingUp className="w-3 h-3 ml-0.5" />
+                                <span className="text-[9px] font-bold">+2.1%</span>
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <div className="flex items-center justify-between text-[10px] text-[#8B949E] bg-[#0D1117]/80 rounded p-1.5 border border-[#21262D]/60 font-sans mt-2">
+                      <span>Overall Combined Score:</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-bold text-white">93.8% Mean</span>
+                        <span className="flex items-center text-emerald-400 text-[9px] font-mono font-bold bg-emerald-950/30 px-1 py-0.5 rounded border border-emerald-900/30" title="Overall net progress +1.0% from baseline">
+                          <TrendingUp className="w-2.5 h-2.5 mr-0.5" />
+                          <span>+1.0%</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleExportAccuracyCSV();
+                      }}
+                      className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-950/40 hover:bg-blue-900/60 text-blue-400 hover:text-blue-300 border border-blue-900/50 hover:border-blue-500/50 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all shadow-sm cursor-pointer select-none"
+                      title="Export MONAI accuracy breakdown metrics to CSV"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Export CSV
+                    </button>
+
+                    {/* Tooltip Down Arrow */}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-[#30363D]"></div>
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1.5 border-4 border-transparent border-t-[#161B22]"></div>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleExportAccuracyCSV();
-                    }}
-                    className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-950/40 hover:bg-blue-900/60 text-blue-400 hover:text-blue-300 border border-blue-900/50 hover:border-blue-500/50 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all shadow-sm cursor-pointer select-none"
-                    title="Export MONAI accuracy breakdown metrics to CSV"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Export CSV
-                  </button>
-
-                  {/* Tooltip Down Arrow */}
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-[#30363D]"></div>
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1.5 border-4 border-transparent border-t-[#161B22]"></div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Case Registry mode switcher */}
@@ -4126,7 +4226,7 @@ export default function App() {
                         <span className="text-[8px] text-blue-400 bg-blue-950/30 px-1.5 py-0.5 rounded border border-blue-900/30 font-mono uppercase tracking-wider font-bold">Rich Text Enabled</span>
                       </div>
 
-                      <div className="w-full bg-[#0D1117] border border-[#30363D] focus-within:border-blue-500 rounded-lg overflow-hidden flex flex-col transition-all">
+                      <div className={`w-full ${isDraggingOverEditor ? 'bg-[#1a1f2e] border-blue-500 ring-2 ring-blue-500/30' : 'bg-[#0D1117] border-[#30363D]'} border focus-within:border-blue-500 rounded-lg overflow-hidden flex flex-col transition-all`}>
                         {/* Rich Text Toolbar */}
                         <div className="flex items-center gap-1.5 bg-[#161B22] px-2 py-1.5 border-b border-[#30363D] shrink-0">
                           <button
@@ -4170,6 +4270,9 @@ export default function App() {
                           contentEditable
                           onInput={handleEditorInput}
                           onBlur={handleEditorInput}
+                          onDragOver={handleEditorDragOver}
+                          onDragLeave={handleEditorDragLeave}
+                          onDrop={handleEditorDrop}
                           placeholder="Document observations, clinical signs, or custom diagnostic remarks for this specimen..."
                           className="rich-editor w-full h-24 p-2 text-xs text-[#C9D1D9] focus:outline-none overflow-y-auto font-normal prose prose-invert select-text"
                           style={{ minHeight: '96px' }}
@@ -5131,9 +5234,10 @@ export default function App() {
                   setColorNorm={setColorNorm}
                   segmentationOpacity={segmentationOpacity}
                   setSegmentationOpacity={setSegmentationOpacity}
-                  annotations={annotationsMap[selectedSampleId] || []}
+                  annotations={annotationsMap[selectedSampleId] || EMPTY_ARRAY}
                   onAddAnnotation={handleAddAnnotation}
                   onDeleteAnnotation={handleDeleteAnnotation}
+                  devMode={devMode}
                 />
               </div>
               <div>
@@ -5207,7 +5311,7 @@ export default function App() {
               approvedReport={approvedReportForCurrent}
               selectedModelId={selectedModelId}
               onModelChange={setSelectedModelId}
-              annotations={annotationsMap[selectedSampleId] || []}
+              annotations={annotationsMap[selectedSampleId] || EMPTY_ARRAY}
             />
           </div>
         )}
@@ -5236,6 +5340,36 @@ export default function App() {
 
             {/* Research Roadmap panel */}
             <ResearchRoadmap sample={currentSample} />
+          </div>
+        )}
+
+        {/* PAGE 6: IEEE ACADEMIC SUITE */}
+        {activePage === 'ieee' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="bg-[#0D1117] border-l-4 border-amber-500 p-4 rounded-r-xl border border-[#1F2937] border-l-none flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-amber-500 tracking-wider font-mono bg-amber-950/40 px-1.5 py-0.5 rounded">Conference Publication Center</span>
+                <h3 className="text-sm font-bold text-white mt-1.5">
+                  IEEE EMBS / Bioinformatics Conference Demonstration Suite
+                </h3>
+                <p className="text-[11px] text-[#8B949E] mt-0.5 font-normal">
+                  Publishing-oriented companion module designed to generate copy-pasteable LaTeX files, presentation slides, citations, and interactive mathematical complexity proofs using active biopsy data.
+                </p>
+              </div>
+              <button
+                onClick={() => setActivePage('roadmap')}
+                className="text-xs font-semibold text-amber-500 hover:text-white bg-amber-955/20 hover:bg-amber-600 border border-amber-900/40 px-3 py-1.5 rounded transition-all shrink-0 cursor-pointer"
+              >
+                ← Go to Roadmap Plans
+              </button>
+            </div>
+
+            <IEEEAcademicSuite 
+              sample={currentSample}
+              selectedModelId={selectedModelId}
+              colorNorm={colorNorm}
+              segmentationActive={segmentationActive}
+            />
           </div>
         )}
 
@@ -5540,7 +5674,7 @@ export default function App() {
       <BatchReportModal
         isOpen={isBatchReportOpen}
         onClose={() => setIsBatchReportOpen(false)}
-        selectedSamples={samples.filter(s => batchSelectedIds.includes(s.id))}
+        selectedSamples={selectedBatchSamples}
         calculateRiskScore={calculateRiskScore}
       />
 

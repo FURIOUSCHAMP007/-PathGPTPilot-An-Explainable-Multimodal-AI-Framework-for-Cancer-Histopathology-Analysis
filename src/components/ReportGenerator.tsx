@@ -93,7 +93,7 @@ export default function ReportGenerator({
         parts.push(
           <strong 
             key={match.index} 
-            className="text-white font-bold font-mono bg-blue-950/40 px-1.5 py-0.5 rounded border border-blue-900/40 text-[11px] inline-block mx-0.5"
+            className="text-white font-bold font-sans bg-blue-950/40 px-1.5 py-0.5 rounded border border-blue-900/40 text-[11px] inline-block mx-0.5"
           >
             {match[1]}
           </strong>
@@ -116,20 +116,109 @@ export default function ReportGenerator({
       );
     };
 
-    // Filter lines and map them
     const lines = text.split('\n');
     const elements: React.ReactNode[] = [];
+    let currentList: { key: number; items: string[] } | null = null;
+    let currentTable: { key: number; headers: string[]; rows: string[][] } | null = null;
 
-    lines.forEach((line, idx) => {
+    const flushList = (index: number) => {
+      if (currentList) {
+        elements.push(
+          <div key={`list-${currentList.key}-${index}`} className="space-y-1.5 my-3">
+            {currentList.items.map((item, itemIdx) => (
+              <div key={itemIdx} className="text-xs text-[#C9D1D9] pl-4 py-1.5 flex items-start gap-2 border-l border-[#21262D] hover:border-blue-500/30 transition-all ml-1 my-0.5">
+                <span className="text-blue-500 font-bold select-none">•</span>
+                <div className="flex-1 leading-relaxed">
+                  {parseInline(item)}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+        currentList = null;
+      }
+    };
+
+    const flushTable = (index: number) => {
+      if (currentTable) {
+        elements.push(
+          <div key={`table-${currentTable.key}-${index}`} className="my-4 overflow-x-auto rounded-xl border border-[#30363D] bg-[#0D1117] p-1 shadow-inner">
+            <table className="w-full text-left border-collapse text-xs font-sans">
+              <thead>
+                <tr className="border-b border-[#30363D] bg-[#161B22]/80">
+                  {currentTable.headers.map((header, hIdx) => (
+                    <th key={hIdx} className="px-3.5 py-2.5 font-mono font-bold text-[#8B949E] uppercase tracking-wider text-[10px]">
+                      {header.trim()}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#21262D]/60 text-gray-300">
+                {currentTable.rows.map((row, rIdx) => (
+                  <tr key={rIdx} className="hover:bg-[#161B22]/40 transition-colors">
+                    {row.map((cell, cIdx) => (
+                      <td key={cIdx} className="px-3.5 py-2.5 text-[11px] leading-relaxed">
+                        {parseInline(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        currentTable = null;
+      }
+    };
+
+    for (let idx = 0; idx < lines.length; idx++) {
+      const line = lines[idx];
       const cleanLine = line.trim();
-      
+
       // Skip empty bullets or standalone bullets
       if (cleanLine === '•' || cleanLine === '*' || cleanLine === '-' || cleanLine === '') {
-        return;
+        flushList(idx);
+        flushTable(idx);
+        continue;
       }
 
-      // Headers
+      // Check if line is a table row
+      if (cleanLine.startsWith('|')) {
+        flushList(idx);
+        
+        const cells = cleanLine.split('|').map(c => c.trim()).filter((_, cIdx, arr) => cIdx > 0 && cIdx < arr.length - 1);
+        const isSeparator = cells.every(cell => /^:?-+:?$/.test(cell));
+        
+        if (isSeparator) {
+          continue;
+        }
+
+        if (!currentTable) {
+          currentTable = {
+            key: idx,
+            headers: cells,
+            rows: []
+          };
+        } else {
+          // Normalize row cells length to match the header length to prevent crashes or layout breaks
+          const normalizedCells = [...cells];
+          while (normalizedCells.length < currentTable.headers.length) {
+            normalizedCells.push('');
+          }
+          if (normalizedCells.length > currentTable.headers.length) {
+            normalizedCells.splice(currentTable.headers.length);
+          }
+          currentTable.rows.push(normalizedCells);
+        }
+        continue;
+      } else {
+        flushTable(idx);
+      }
+
+      // Headers (ensure any pending lists or tables are flushed first)
       if (cleanLine.startsWith('# ')) {
+        flushList(idx);
+        flushTable(idx);
         const content = cleanLine.replace(/#/g, '').trim();
         elements.push(
           <h3 key={idx} className="text-sm font-black text-white border-b border-[#30363D] pb-1.5 mt-6 mb-3 font-mono uppercase tracking-widest flex items-center gap-2">
@@ -137,25 +226,29 @@ export default function ReportGenerator({
             {content}
           </h3>
         );
-        return;
+        continue;
       }
       if (cleanLine.startsWith('## ')) {
+        flushList(idx);
+        flushTable(idx);
         const content = cleanLine.replace(/#/g, '').trim();
         elements.push(
           <h4 key={idx} className="text-xs font-bold text-blue-400 border-b border-[#21262D] pb-1 mt-5 mb-2 font-mono uppercase tracking-wider">
             {content}
           </h4>
         );
-        return;
+        continue;
       }
       if (cleanLine.startsWith('### ')) {
+        flushList(idx);
+        flushTable(idx);
         const content = cleanLine.replace(/#/g, '').trim();
         elements.push(
           <h5 key={idx} className="text-[11px] font-bold text-blue-300 mt-4 mb-1.5 font-mono uppercase tracking-wider">
             {content}
           </h5>
         );
-        return;
+        continue;
       }
 
       // Check if line is a list item
@@ -163,17 +256,18 @@ export default function ReportGenerator({
       const isBoldListItem = cleanLine.startsWith('* **') || cleanLine.startsWith('- **') || cleanLine.startsWith('• **');
 
       if (isBoldListItem || isListItem) {
-        // Strip the list token
-        let itemContent = cleanLine.replace(/^([\*\-\s•]+)/, '').trim();
-        elements.push(
-          <div key={idx} className="text-xs text-[#C9D1D9] pl-4 py-1.5 flex items-start gap-2 border-l border-[#21262D] hover:border-blue-500/30 transition-all ml-1 my-0.5">
-            <span className="text-blue-500 font-bold select-none">•</span>
-            <div className="flex-1 leading-relaxed">
-              {parseInline(itemContent)}
-            </div>
-          </div>
-        );
-        return;
+        const itemContent = cleanLine.replace(/^([\*\-\s•]+)/, '').trim();
+        if (!currentList) {
+          currentList = {
+            key: idx,
+            items: [itemContent]
+          };
+        } else {
+          currentList.items.push(itemContent);
+        }
+        continue;
+      } else {
+        flushList(idx);
       }
 
       // Standard paragraph
@@ -182,7 +276,10 @@ export default function ReportGenerator({
           {parseInline(cleanLine)}
         </p>
       );
-    });
+    }
+
+    flushList(lines.length);
+    flushTable(lines.length);
 
     return elements;
   };
@@ -238,7 +335,7 @@ export default function ReportGenerator({
 
       <div className="grid md:grid-cols-5 gap-5">
         {/* Left column: input notes and trigger */}
-        <div className="md:col-span-2 space-y-4 flex flex-col justify-between">
+        <div className="md:col-span-2 space-y-4">
           <div className="space-y-4">
             {/* Quick Presets Templates */}
             <div className="space-y-1.5 p-2 bg-[#161B22] border border-[#30363D] rounded-lg">
@@ -443,7 +540,7 @@ export default function ReportGenerator({
         </div>
 
         {/* Right column: Report document display */}
-        <div className="md:col-span-3 border border-[#1F2937] rounded-xl overflow-hidden bg-[#161B22] flex flex-col min-h-[24rem] shadow-none">
+        <div className="md:col-span-3 border border-[#1F2937] rounded-xl overflow-hidden bg-[#161B22] flex flex-col h-[44rem] shadow-none">
           
           {/* Document header action bar */}
           <div className="bg-[#0D1117] border-b border-[#1F2937] px-4 py-2.5 flex items-center justify-between shrink-0">
@@ -474,7 +571,7 @@ export default function ReportGenerator({
           </div>
 
           {/* Document Content */}
-          <div className="p-5 overflow-y-auto max-h-[22rem] bg-[#010409] flex-1 relative font-sans">
+          <div className="p-5 overflow-y-auto bg-[#010409] flex-1 relative font-sans">
             {reportText ? (
               <div className="bg-[#0D1117] border border-[#30363D] p-5 rounded-lg relative">
                 
@@ -496,7 +593,7 @@ export default function ReportGenerator({
                 <div className="grid grid-cols-3 gap-3 border-b border-[#21262D] pb-2.5 mb-3 text-[10px] bg-[#161B22] border border-[#30363D] p-2 rounded">
                   <div>
                     <span className="block text-[9px] uppercase font-bold text-[#8B949E]">Patient Identifier</span>
-                    <span className="font-bold text-[#E0E0E0]">PAT-7329 (Jane Doe)</span>
+                    <span className="font-bold text-[#E0E0E0]">PAT-{sample.id.split('-').pop() || '7329'} ({sample.clinical.gender === 'Female' ? 'Jane Doe' : 'John Doe'})</span>
                   </div>
                   <div>
                     <span className="block text-[9px] uppercase font-bold text-[#8B949E]">Specimen Source</span>
@@ -523,10 +620,10 @@ export default function ReportGenerator({
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-6 border-t border-[#21262D] pt-3.5 space-y-3">
+                  <div className="mt-6 border-t border-[#21262D] pt-3.5 space-y-2.5">
                     <div className="text-xs font-bold text-[#E0E0E0] uppercase tracking-wide">Pathologist Authentication Signoff</div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
+                    <div className="flex flex-col sm:flex-row gap-2 items-center">
+                      <div className="flex-1 w-full">
                         <input
                           type="text"
                           value={signName}
@@ -535,7 +632,7 @@ export default function ReportGenerator({
                           className="w-full px-2.5 py-1.5 text-xs border border-[#30363D] rounded bg-[#010409] text-white outline-none focus:border-rose-500 font-mono"
                         />
                       </div>
-                      <div>
+                      <div className="flex-1 w-full">
                         <input
                           type="text"
                           value={signTitle}
@@ -544,18 +641,18 @@ export default function ReportGenerator({
                           className="w-full px-2.5 py-1.5 text-xs border border-[#30363D] rounded bg-[#010409] text-white outline-none focus:border-rose-500 font-mono"
                         />
                       </div>
+                      <button
+                        disabled={!signName}
+                        onClick={handleApproveReport}
+                        className={`sm:w-auto w-full py-1.5 px-3.5 text-white rounded text-[11px] font-bold uppercase tracking-wide transition-colors flex items-center justify-center gap-1.5 shrink-0 h-[28px] whitespace-nowrap ${
+                          signName ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer border border-blue-500' : 'bg-[#161B22] border border-[#30363D] text-[#8B949E] cursor-not-allowed'
+                        }`}
+                        id="approve-report-btn"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span>Authenticate & Sign</span>
+                      </button>
                     </div>
-                    <button
-                      disabled={!signName}
-                      onClick={handleApproveReport}
-                      className={`w-full py-2 px-3 text-white rounded text-[11px] font-bold uppercase tracking-wide transition-colors flex items-center justify-center gap-1.5 ${
-                        signName ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer border border-blue-500' : 'bg-[#161B22] border border-[#30363D] text-[#8B949E] cursor-not-allowed'
-                      }`}
-                      id="approve-report-btn"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      <span>Authenticate & Sign Medical Record</span>
-                    </button>
                   </div>
                 )}
 
@@ -698,7 +795,7 @@ export default function ReportGenerator({
                 <div className="grid grid-cols-2 gap-4 mb-5 border border-gray-200 rounded p-4 bg-gray-50/50 text-xs">
                   <div className="space-y-1.5">
                     <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider font-mono">Patient Demographics</div>
-                    <div><span className="text-gray-500">Patient ID:</span> <strong className="text-gray-950 font-mono">PAT-7329 (Jane Doe)</strong></div>
+                    <div><span className="text-gray-500">Patient ID:</span> <strong className="text-gray-950 font-mono">PAT-{sample.id.split('-').pop() || '7329'} ({sample.clinical.gender === 'Female' ? 'Jane Doe' : 'John Doe'})</strong></div>
                     <div><span className="text-gray-500">Age / Gender:</span> <strong className="text-gray-900">{sample.clinical.age} Years • {sample.clinical.gender}</strong></div>
                     <div><span className="text-gray-500">Referral Stage:</span> <strong className="text-rose-600 font-mono font-bold">{sample.clinical.stage}</strong></div>
                   </div>

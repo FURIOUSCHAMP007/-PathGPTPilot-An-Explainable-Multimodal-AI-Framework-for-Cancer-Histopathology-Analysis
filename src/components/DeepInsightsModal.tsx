@@ -319,7 +319,7 @@ export default function DeepInsightsModal({
         parts.push(
           <strong 
             key={match.index} 
-            className="text-white font-bold font-mono bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-900/40 text-[11px] inline-block mx-0.5"
+            className="text-white font-bold font-sans bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-900/40 text-[11px] inline-block mx-0.5"
           >
             {match[1]}
           </strong>
@@ -342,20 +342,109 @@ export default function DeepInsightsModal({
       );
     };
 
-    // Filter lines and map them
     const lines = text.split('\n');
     const elements: React.ReactNode[] = [];
+    let currentList: { key: number; items: string[] } | null = null;
+    let currentTable: { key: number; headers: string[]; rows: string[][] } | null = null;
 
-    lines.forEach((line, idx) => {
+    const flushList = (index: number) => {
+      if (currentList) {
+        elements.push(
+          <div key={`list-${currentList.key}-${index}`} className="space-y-1.5 my-3">
+            {currentList.items.map((item, itemIdx) => (
+              <div key={itemIdx} className="text-xs text-[#C9D1D9] pl-4 py-1.5 flex items-start gap-2 border-l border-[#21262D] hover:border-purple-500/30 transition-all ml-1 my-0.5">
+                <span className="text-purple-500 font-bold select-none">•</span>
+                <div className="flex-1 leading-relaxed">
+                  {parseInline(item)}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+        currentList = null;
+      }
+    };
+
+    const flushTable = (index: number) => {
+      if (currentTable) {
+        elements.push(
+          <div key={`table-${currentTable.key}-${index}`} className="my-4 overflow-x-auto rounded-xl border border-[#30363D] bg-[#0D1117] p-1 shadow-inner">
+            <table className="w-full text-left border-collapse text-xs font-sans">
+              <thead>
+                <tr className="border-b border-[#30363D] bg-[#161B22]/80">
+                  {currentTable.headers.map((header, hIdx) => (
+                    <th key={hIdx} className="px-3.5 py-2.5 font-mono font-bold text-[#8B949E] uppercase tracking-wider text-[10px]">
+                      {header.trim()}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#21262D]/60 text-gray-300">
+                {currentTable.rows.map((row, rIdx) => (
+                  <tr key={rIdx} className="hover:bg-[#161B22]/40 transition-colors">
+                    {row.map((cell, cIdx) => (
+                      <td key={cIdx} className="px-3.5 py-2.5 text-[11px] leading-relaxed">
+                        {parseInline(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        currentTable = null;
+      }
+    };
+
+    for (let idx = 0; idx < lines.length; idx++) {
+      const line = lines[idx];
       const cleanLine = line.trim();
-      
+
       // Skip empty bullets or standalone bullets
       if (cleanLine === '•' || cleanLine === '*' || cleanLine === '-' || cleanLine === '') {
-        return;
+        flushList(idx);
+        flushTable(idx);
+        continue;
       }
 
-      // Headers
+      // Check if line is a table row
+      if (cleanLine.startsWith('|')) {
+        flushList(idx);
+        
+        const cells = cleanLine.split('|').map(c => c.trim()).filter((_, cIdx, arr) => cIdx > 0 && cIdx < arr.length - 1);
+        const isSeparator = cells.every(cell => /^:?-+:?$/.test(cell));
+        
+        if (isSeparator) {
+          continue;
+        }
+
+        if (!currentTable) {
+          currentTable = {
+            key: idx,
+            headers: cells,
+            rows: []
+          };
+        } else {
+          // Normalize row cells length to match the header length to prevent crashes or layout breaks
+          const normalizedCells = [...cells];
+          while (normalizedCells.length < currentTable.headers.length) {
+            normalizedCells.push('');
+          }
+          if (normalizedCells.length > currentTable.headers.length) {
+            normalizedCells.splice(currentTable.headers.length);
+          }
+          currentTable.rows.push(normalizedCells);
+        }
+        continue;
+      } else {
+        flushTable(idx);
+      }
+
+      // Headers (ensure any pending lists or tables are flushed first)
       if (cleanLine.startsWith('# ')) {
+        flushList(idx);
+        flushTable(idx);
         const content = cleanLine.replace(/#/g, '').trim();
         elements.push(
           <h3 key={idx} className="text-sm font-black text-white border-b border-[#30363D] pb-1.5 mt-6 mb-3 font-mono uppercase tracking-widest flex items-center gap-2">
@@ -363,25 +452,29 @@ export default function DeepInsightsModal({
             {content}
           </h3>
         );
-        return;
+        continue;
       }
       if (cleanLine.startsWith('## ')) {
+        flushList(idx);
+        flushTable(idx);
         const content = cleanLine.replace(/#/g, '').trim();
         elements.push(
           <h4 key={idx} className="text-xs font-bold text-purple-400 border-b border-[#21262D] pb-1 mt-5 mb-2 font-mono uppercase tracking-wider">
             {content}
           </h4>
         );
-        return;
+        continue;
       }
       if (cleanLine.startsWith('### ')) {
+        flushList(idx);
+        flushTable(idx);
         const content = cleanLine.replace(/#/g, '').trim();
         elements.push(
           <h5 key={idx} className="text-[11px] font-bold text-blue-400 mt-4 mb-1.5 font-mono uppercase tracking-wider">
             {content}
           </h5>
         );
-        return;
+        continue;
       }
 
       // Check if line is a list item
@@ -389,17 +482,18 @@ export default function DeepInsightsModal({
       const isBoldListItem = cleanLine.startsWith('* **') || cleanLine.startsWith('- **') || cleanLine.startsWith('• **');
 
       if (isBoldListItem || isListItem) {
-        // Strip the list token
-        let itemContent = cleanLine.replace(/^([\*\-\s•]+)/, '').trim();
-        elements.push(
-          <div key={idx} className="text-xs text-gray-300 pl-4 py-1.5 flex items-start gap-2 border-l border-[#21262D] hover:border-purple-500/30 transition-all ml-1 my-0.5">
-            <span className="text-purple-500 font-bold select-none">•</span>
-            <div className="flex-1 leading-relaxed">
-              {parseInline(itemContent)}
-            </div>
-          </div>
-        );
-        return;
+        const itemContent = cleanLine.replace(/^([\*\-\s•]+)/, '').trim();
+        if (!currentList) {
+          currentList = {
+            key: idx,
+            items: [itemContent]
+          };
+        } else {
+          currentList.items.push(itemContent);
+        }
+        continue;
+      } else {
+        flushList(idx);
       }
 
       // Standard paragraph
@@ -408,7 +502,10 @@ export default function DeepInsightsModal({
           {parseInline(cleanLine)}
         </p>
       );
-    });
+    }
+
+    flushList(lines.length);
+    flushTable(lines.length);
 
     return elements;
   };

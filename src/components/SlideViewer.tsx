@@ -5,7 +5,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { HistologySample, CellNode, SlideAnnotation } from '../types';
-import { Layers, ShieldCheck, HelpCircle, Eye, EyeOff, Sliders, Cpu, Split, Info, MapPin, Plus, Trash2, Crosshair, Target, X, Sparkles, Maximize2, Activity } from 'lucide-react';
+import { Layers, ShieldCheck, HelpCircle, Eye, EyeOff, Sliders, Cpu, Split, Info, MapPin, Plus, Trash2, Crosshair, Target, X, Sparkles, Maximize2, Activity, Grid } from 'lucide-react';
 
 interface SlideViewerProps {
   sample: HistologySample;
@@ -20,6 +20,7 @@ interface SlideViewerProps {
   annotations: SlideAnnotation[];
   onAddAnnotation: (anno: Omit<SlideAnnotation, 'id' | 'timestamp'>) => void;
   onDeleteAnnotation: (id: string) => void;
+  devMode?: boolean;
 }
 
 // PHYSICAL STAIN COLOR MAPPINGS BASED ON NORMALIZATION & PRESETS
@@ -297,7 +298,8 @@ export default function SlideViewer({
   setSegmentationOpacity,
   annotations,
   onAddAnnotation,
-  onDeleteAnnotation
+  onDeleteAnnotation,
+  devMode = true
 }: SlideViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hoveredCell, setHoveredCell] = useState<CellNode | null>(null);
@@ -315,6 +317,7 @@ export default function SlideViewer({
   const [riskFilterThreshold, setRiskFilterThreshold] = useState<number>(0); // 0 to 100%
   const [showGridOverlay, setShowGridOverlay] = useState<boolean>(false);
   const [showReticle, setShowReticle] = useState<boolean>(true);
+  const [hoveredPatchId, setHoveredPatchId] = useState<string | null>(null);
 
   // ANNOTATION STATES
   const [pinDropMode, setPinDropMode] = useState<boolean>(false);
@@ -1063,6 +1066,38 @@ export default function SlideViewer({
       ctx.restore();
     }
 
+    // Draw hovered patch highlight (dynamic overlay in physical tissue space)
+    if (hoveredPatchId) {
+      const colLetter = hoveredPatchId.charAt(0);
+      const rowNum = parseInt(hoveredPatchId.substring(1));
+      const cols = ['A', 'B', 'C', 'D'];
+      const colIdx = cols.indexOf(colLetter);
+      const rowIdx = rowNum - 1;
+      if (colIdx >= 0 && rowIdx >= 0) {
+        const step = 500 / 4;
+        const px = colIdx * step;
+        const py = rowIdx * step;
+        
+        ctx.save();
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+        ctx.lineWidth = 2.5;
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.12)';
+        ctx.fillRect(px, py, step, step);
+        ctx.strokeRect(px, py, step, step);
+        
+        // Glow effect
+        ctx.shadowColor = 'rgba(239, 68, 68, 0.6)';
+        ctx.shadowBlur = 6;
+        ctx.strokeRect(px, py, step, step);
+        
+        // Critical Badge inside the patch
+        ctx.fillStyle = '#EF4444';
+        ctx.font = 'bold 8px monospace';
+        ctx.fillText('CRITICAL PATCH', px + 6, py + step - 8);
+        ctx.restore();
+      }
+    }
+
     ctx.restore();
 
     // 6. Draw ABSOLUTE VIEWPORT HUD (Reticle and Scale Bar)
@@ -1140,7 +1175,7 @@ export default function SlideViewer({
       
       ctx.restore();
     }
-  }, [sample, colorNorm, stainPreset, segmentationActive, segmentationOpacity, xaiMode, hoveredCell, zoomLevel, pan, splitMode, splitRatio, riskFilterThreshold, annotations, showGridOverlay, showReticle, upscaleTarget, upscaleEngine, chromatinDetail, envelopeSharpness, noiseReduction, showSubcellularOverlay, isUpscalingProcessing]);
+  }, [sample, colorNorm, stainPreset, segmentationActive, segmentationOpacity, xaiMode, hoveredCell, zoomLevel, pan, splitMode, splitRatio, riskFilterThreshold, annotations, showGridOverlay, showReticle, upscaleTarget, upscaleEngine, chromatinDetail, envelopeSharpness, noiseReduction, showSubcellularOverlay, isUpscalingProcessing, hoveredPatchId]);
 
   // Handle canvas mouse move to locate nodes
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1215,6 +1250,96 @@ export default function SlideViewer({
 
   const tumorRatio = totalNodes > 0 ? (atypicalCount / (atypicalCount + standardCount || 1) * 100) : 0;
 
+  // Group cells by grid square A1-D4 to generate high-risk patches
+  const getHighRiskPatches = () => {
+    const step = 500 / 4;
+    const cols = ['A', 'B', 'C', 'D'];
+    const patchesMap: Record<string, {
+      id: string;
+      col: string;
+      row: number;
+      atypicalCount: number;
+      totalCount: number;
+      avgWeight: number;
+      cells: CellNode[];
+    }> = {};
+
+    sample.cells.forEach(c => {
+      const colIdx = Math.min(3, Math.floor(c.x / step));
+      const rowIdx = Math.min(3, Math.floor(c.y / step));
+      const label = `${cols[colIdx]}${rowIdx + 1}`;
+
+      if (!patchesMap[label]) {
+        patchesMap[label] = {
+          id: label,
+          col: cols[colIdx],
+          row: rowIdx + 1,
+          atypicalCount: 0,
+          totalCount: 0,
+          avgWeight: 0,
+          cells: []
+        };
+      }
+
+      patchesMap[label].totalCount++;
+      patchesMap[label].cells.push(c);
+      if (c.atypical) {
+        patchesMap[label].atypicalCount++;
+      }
+      patchesMap[label].avgWeight += c.gradingWeight;
+    });
+
+    return Object.values(patchesMap)
+      .map(p => ({
+        ...p,
+        avgWeight: p.totalCount > 0 ? Number((p.avgWeight / p.totalCount).toFixed(2)) : 0
+      }))
+      .filter(p => p.atypicalCount > 0)
+      .sort((a, b) => b.atypicalCount - a.atypicalCount || b.avgWeight - a.avgWeight);
+  };
+
+  // Generate dynamic 100x100 SVG representing the microscopic cells in this patch
+  const generatePatchSVGDataUrl = (p: { id: string; col: string; row: number; atypicalCount: number; totalCount: number; avgWeight: number; cells: CellNode[] }) => {
+    const step = 500 / 4;
+    const colIdx = ['A', 'B', 'C', 'D'].indexOf(p.col);
+    const rowIdx = p.row - 1;
+    const minX = colIdx * step;
+    const minY = rowIdx * step;
+
+    let circles = '';
+    // Background color mimicking the staining background stroma (e.g., pinkish-purple)
+    const bgColor = stainPreset === 'giemsa' ? '#EAEFFF' : stainPreset === 'trichrome' ? '#EBFBFA' : stainPreset === 'pas' ? '#FEEAF5' : '#FDEBF3';
+    circles += `<rect width="100" height="100" fill="${bgColor}" rx="8" />`;
+    // Faint grid lines/mesh for texture
+    circles += `<path d="M 0 50 L 100 50 M 50 0 L 50 100" stroke="rgba(0,0,0,0.03)" stroke-width="1" />`;
+
+    p.cells.forEach((c) => {
+      // Scale coordinates to 100x100 range
+      const sx = ((c.x - minX) / step) * 100;
+      const sy = ((c.y - minY) / step) * 100;
+      // Make radius larger for readability at 100x100 thumbnail resolution
+      const sr = Math.max(3, (c.r / step) * 100 * 1.6);
+
+      let color = '#EAB8CE'; // default stroma
+      if (c.type === 'nuclei') {
+        color = c.atypical ? '#EF4444' : '#10B981';
+      } else if (c.type === 'gland') {
+        color = '#3B82F6';
+      }
+
+      // Render cell/nuclei circle
+      circles += `<circle cx="${sx}" cy="${sy}" r="${sr}" fill="${color}" opacity="0.8" />`;
+      
+      // If atypical, add high-risk glowing ring and crosshair tick marks
+      if (c.atypical) {
+        circles += `<circle cx="${sx}" cy="${sy}" r="${sr + 2.5}" fill="none" stroke="#EF4444" stroke-width="1.2" stroke-dasharray="2,1" />`;
+      }
+    });
+
+    const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">${circles}</svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svgString)}`;
+  };
+
   return (
     <div className="bg-[#0D1117] rounded-xl border border-[#1F2937] p-5 flex flex-col md:grid md:grid-cols-3 gap-5" id="diagnostic-slide-panel">
       
@@ -1286,28 +1411,30 @@ export default function SlideViewer({
         {/* Action Controls Column */}
         <div className="space-y-3">
           {/* Normalization Selector */}
-          <div>
-            <label className="block text-[10px] font-bold text-[#8B949E] uppercase tracking-wider mb-1 flex items-center gap-1.5">
-              <Sliders className="w-3 h-3 text-blue-500" />
-              Color Normalization
-            </label>
-            <div className="grid grid-cols-4 gap-1 bg-[#010409] border border-[#1F2937] p-1 rounded">
-              {(['raw', 'macenko', 'reinhard', 'ruifrok'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  id={`btn_norm_${mode}`}
-                  onClick={() => setColorNorm(mode)}
-                  className={`py-1 text-[9px] font-semibold rounded capitalize transition-all duration-150 ${
-                    colorNorm === mode
-                      ? 'bg-blue-600 text-white shadow-sm font-bold'
-                      : 'text-[#8B949E] hover:text-white hover:bg-[#161B22]'
-                  }`}
-                >
-                  {mode === 'ruifrok' ? 'Stain Sep' : mode}
-                </button>
-              ))}
+          {devMode && (
+            <div>
+              <label className="block text-[10px] font-bold text-[#8B949E] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <Sliders className="w-3 h-3 text-blue-500" />
+                Color Normalization
+              </label>
+              <div className="grid grid-cols-4 gap-1 bg-[#010409] border border-[#1F2937] p-1 rounded">
+                {(['raw', 'macenko', 'reinhard', 'ruifrok'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    id={`btn_norm_${mode}`}
+                    onClick={() => setColorNorm(mode)}
+                    className={`py-1 text-[9px] font-semibold rounded capitalize transition-all duration-150 ${
+                      colorNorm === mode
+                        ? 'bg-blue-600 text-white shadow-sm font-bold'
+                        : 'text-[#8B949E] hover:text-white hover:bg-[#161B22]'
+                    }`}
+                  >
+                    {mode === 'ruifrok' ? 'Stain Sep' : mode}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* PHYSICAL STAIN SIMULATION PRESETS */}
           <div>
@@ -1412,7 +1539,7 @@ export default function SlideViewer({
             )}
 
             {/* Model and Parameter Adjusters (only shown when magnification is enhanced) */}
-            {upscaleTarget !== '20x' && (
+            {upscaleTarget !== '20x' && devMode && (
               <div className="space-y-2 pt-1 border-t border-[#1F2937] text-[9px] animate-fade-in">
                 {/* AI Algorithm selector */}
                 <div className="space-y-1">
@@ -1658,6 +1785,104 @@ export default function SlideViewer({
               </div>
             )}
           </div>
+
+          {/* HIGH-RISK HIGHLIGHTED PATCHES */}
+          <div className="border border-[#30363D] rounded-lg p-2.5 bg-[#11161D] flex flex-col space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-[#C9D1D9] flex items-center gap-1.5 uppercase tracking-wide">
+                <Grid className="w-3.5 h-3.5 text-rose-500" />
+                High-Risk Patches ({getHighRiskPatches().length})
+              </span>
+              <span className="text-[8px] text-[#8B949E] uppercase font-mono font-bold bg-[#010409] border border-[#1F2937] px-1.5 py-0.5 rounded">
+                DRAG TO NOTES
+              </span>
+            </div>
+
+            {getHighRiskPatches().length === 0 ? (
+              <p className="text-[9px] text-[#8B949E] leading-relaxed italic text-center py-1.5 bg-[#010409]/40 border border-dashed border-[#1F2937] rounded">
+                No atypical cell clusters flagged in this specimen's scan.
+              </p>
+            ) : (
+              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+                {getHighRiskPatches().map((p) => {
+                  const svgDataUrl = generatePatchSVGDataUrl(p);
+                  
+                  return (
+                    <div 
+                      key={p.id}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/html', `
+                          <div class="my-3 p-3 bg-[#161B22] border border-[#30363D] rounded-lg text-white" style="font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; gap: 12px; max-width: 480px;">
+                            <img src="${svgDataUrl}" style="width: 56px; height: 56px; border-radius: 6px; object-fit: cover; border: 1px solid #444C56; flex-shrink: 0;" />
+                            <div style="flex-grow: 1;">
+                              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;">
+                                <span style="font-size: 10px; font-weight: bold; font-family: monospace; text-transform: uppercase; color: #F87171; background-color: rgba(127, 29, 29, 0.3); border: 1px solid rgba(185, 28, 28, 0.4); padding: 1px 4px; border-radius: 3px;">High-Risk Patch ${p.id}</span>
+                                <span style="font-size: 9px; font-family: monospace; color: #8B949E;">Grad-CAM: ${p.avgWeight}</span>
+                              </div>
+                              <p style="font-size: 11px; color: #C9D1D9; margin: 0; line-height: 1.4;">
+                                ViT attention grid flagged <strong>${p.atypicalCount} atypical nucle${p.atypicalCount > 1 ? 'i' : 'us'}</strong> within coordinate sector. Morphological features show nuclear envelope crowding and potential hyperchromasia.
+                              </p>
+                            </div>
+                          </div>
+                        `);
+                        e.dataTransfer.setData('text/plain', `[High-Risk Patch ${p.id}] flagged with ${p.atypicalCount} atypical nuclei. Grad-CAM: ${p.avgWeight}`);
+                      }}
+                      onMouseEnter={() => setHoveredPatchId(p.id)}
+                      onMouseLeave={() => setHoveredPatchId(null)}
+                      className="p-1.5 rounded bg-[#010409] border border-[#1F2937] hover:border-[#EF4444]/60 transition-all flex items-center justify-between gap-2.5 group/patch cursor-grab active:cursor-grabbing select-none"
+                      title="Drag this card directly into the Physician Notes editor below"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {/* Interactive SVG Preview */}
+                        <img 
+                          src={svgDataUrl} 
+                          alt={`Patch ${p.id}`} 
+                          className="w-10 h-10 rounded bg-[#161B22] border border-[#21262D] object-cover shrink-0 select-none pointer-events-none group-hover/patch:border-[#EF4444]/40 transition-all"
+                        />
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-white font-mono leading-none">{p.id}</span>
+                            <span className="text-[8px] font-bold font-mono px-1 py-0.2 rounded leading-none text-rose-400 bg-rose-950/20 border border-rose-900/30">
+                              {p.atypicalCount} ATYPICAL
+                            </span>
+                          </div>
+                          <span className="text-[8px] text-[#8B949E] font-mono leading-none mt-1">
+                            Grad-CAM: {p.avgWeight} • {p.totalCount} cells
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cols = ['A', 'B', 'C', 'D'];
+                          const colIdx = cols.indexOf(p.col);
+                          const rowIdx = p.row - 1;
+                          const step = 500 / 4;
+                          
+                          // Focus the camera on this patch cell center
+                          const centerX = colIdx * step + step / 2;
+                          const centerY = rowIdx * step + step / 2;
+                          
+                          setZoomLevel(1.8);
+                          setPan({
+                            x: -(centerX - 250) * 1.8,
+                            y: -(centerY - 250) * 1.8
+                          });
+                        }}
+                        className="p-1 rounded bg-[#161B22] hover:bg-rose-950/40 text-blue-400 hover:text-rose-400 transition cursor-pointer"
+                        title="Focus Viewport on Patch Coordinates"
+                      >
+                        <Target className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
  
@@ -1819,32 +2044,34 @@ export default function SlideViewer({
         </div>
  
         {/* XAI Model Selector Overlay */}
-        <div className="absolute bottom-3 left-3 right-16 bg-[#0D1117]/90 backdrop-blur border border-[#30363D] rounded-lg p-1.5 flex items-center justify-between z-10 shadow-lg gap-2 overflow-x-auto">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-[#8B949E] flex items-center gap-1 shrink-0">
-            <ShieldCheck className="w-3 h-3 text-blue-400" /> Explainable AI (XAI):
-          </span>
-          <div className="flex space-x-1">
-            {([
-              { id: 'none', label: 'OFF' },
-              { id: 'grad-cam', label: 'Grad-CAM' },
-              { id: 'shap', label: 'SHAP Forces' },
-              { id: 'integrated', label: 'Attributions' }
-            ] as const).map(mode => (
-              <button
-                key={mode.id}
-                id={`xai_btn_${mode.id}`}
-                onClick={() => setXaiMode(mode.id)}
-                className={`px-2 py-0.5 text-[9px] font-bold rounded transition duration-150 uppercase tracking-wide ${
-                  xaiMode === mode.id
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-[#21262D] text-[#C9D1D9] hover:bg-[#30363D]'
-                }`}
-              >
-                {mode.label}
-              </button>
-            ))}
+        {devMode && (
+          <div className="absolute bottom-3 left-3 right-16 bg-[#0D1117]/90 backdrop-blur border border-[#30363D] rounded-lg p-1.5 flex items-center justify-between z-10 shadow-lg gap-2 overflow-x-auto">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-[#8B949E] flex items-center gap-1 shrink-0">
+              <ShieldCheck className="w-3 h-3 text-blue-400" /> Explainable AI (XAI):
+            </span>
+            <div className="flex space-x-1">
+              {([
+                { id: 'none', label: 'OFF' },
+                { id: 'grad-cam', label: 'Grad-CAM' },
+                { id: 'shap', label: 'SHAP Forces' },
+                { id: 'integrated', label: 'Attributions' }
+              ] as const).map(mode => (
+                <button
+                  key={mode.id}
+                  id={`xai_btn_${mode.id}`}
+                  onClick={() => setXaiMode(mode.id)}
+                  className={`px-2 py-0.5 text-[9px] font-bold rounded transition duration-150 uppercase tracking-wide ${
+                    xaiMode === mode.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-[#21262D] text-[#C9D1D9] hover:bg-[#30363D]'
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
